@@ -38,7 +38,7 @@ while True:
     time.sleep(3)
 log('Qi Ultra brain is running on the GPUs')
 
-KEY = 'qi-' + secrets.token_urlsafe(12)
+KEY = "qi-" + secrets.token_hex(8)
 qenv = dict(os.environ, QI_KEY=KEY, QI_NAME='Qi Ultra', QI_STORE='/kaggle/working/qi-chats', QI_KEEP_DAYS='3')
 subprocess.Popen([sys.executable, '-m', 'uvicorn', '--app-dir', W, 'qi_server:app', '--host', '127.0.0.1', '--port', '8090'],
                  stdout=open(f'{W}/qi.log', 'w'), stderr=subprocess.STDOUT, env=qenv)
