@@ -80,7 +80,9 @@ def web_search(query: str) -> str:
     print(f'search {query[:60]!r}: {len(hits)} results {err[:80]}', flush=True)
     if not hits:
         return 'no results found; try web_search again with a shorter query'
-    return '\n\n'.join(f"{i + 1}. {h.get('title', '')}\n{h.get('href', '')}\n{h.get('body', '')}" for i, h in enumerate(hits))
+    head = (f"Web search results from today ({datetime.date.today().strftime('%d %B %Y')}). They are newer than your own "
+            "knowledge: base the answer on them, not on memory, and list the links you used under 'Sources:'.\n\n")
+    return head + '\n\n'.join(f"{i + 1}. {h.get('title', '')}\n{h.get('href', '')}\n{h.get('body', '')}" for i, h in enumerate(hits))
 
 
 async def open_page(url: str) -> str:
