@@ -9,7 +9,7 @@ def sh(c): return subprocess.run(c, shell=True)
 def log(*a): print(time.strftime('%H:%M:%S'), *a, flush=True)
 
 log('installing tools')
-sh('pip -q install gdown fastapi uvicorn httpx > /dev/null 2>&1')
+sh('pip -q install gdown fastapi uvicorn httpx ddgs > /dev/null 2>&1')
 TAG = 'b12307'
 for f in [f'llama-{TAG}-bin-ubuntu-cuda-12.8-x64.tar.gz', f'cudart-llama-{TAG}-bin-ubuntu-cuda-12.8-x64.tar.gz']:
     sh(f'cd {W} && curl -sL --fail -o {f} https://github.com/ggml-org/llama.cpp/releases/download/{TAG}/{f} && mkdir -p ll && tar -xzf {f} -C ll')

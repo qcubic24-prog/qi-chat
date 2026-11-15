@@ -38,6 +38,9 @@
   dialog input { width:100%; font:inherit; padding:9px 10px; border:1px solid var(--line); border-radius:10px; }
   .row { display:flex; justify-content:space-between; gap:8px; margin-top:16px; }
   .status { font-size:12px; color:var(--mute); }
+  .bubble pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; white-space:pre; }
+  .bubble code { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:14px; }
+  .bubble a { color:#b8470c; word-break:break-all; }
 </style>
 </head>
 <body>
@@ -95,9 +98,29 @@ function fillServers() {
   sel.value = servers.length ? Math.min(current, servers.length - 1) : -1;
 }
 
+// Small, safe markdown: everything is escaped first, then bold, italics, code, headings, lists and links.
+function md(t) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const blocks = t.split(/```/);
+  return blocks.map((b, i) => {
+    if (i % 2) return '<pre><code>' + esc(b.replace(/^[a-z0-9]*\n/i, '')) + '</code></pre>';
+    let h = esc(b);
+    h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>')
+         .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+         .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
+         .replace(/^#{1,6} (.*)$/gm, '<b>$1</b>')
+         .replace(/^\s*[-*] (.*)$/gm, '• $1')
+         .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+         .replace(/(^|[\s(])(https?:\/\/[^\s)<]*[^\s)<.,;:!?'])/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+    return h;
+  }).join('');
+}
+function setMd(el, t) { el.innerHTML = md(t); }
+
 function bubble(role, text) {
   const row = document.createElement('div'); row.className = 'msg ' + (role === 'user' ? 'user' : 'qi');
-  const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text;
+  const b = document.createElement('div'); b.className = 'bubble';
+  if (role === 'user') b.textContent = text; else setMd(b, text);
   row.append(b); $('#log').append(row); $('#log').scrollTop = 1e9; return b;
 }
 
@@ -119,7 +142,7 @@ async function send(text) {
   bubble('user', text);
   const out = bubble('assistant', '…');
   busy = true; $('#send').disabled = true;
-  let answer = '';
+  let answer = '', status = 'Thinking';
   try {
     const r = await fetch(s.url + '/v1/chat/completions', {
       method: 'POST',
@@ -138,9 +161,15 @@ async function send(text) {
       const lines = buf.split('\n'); buf = lines.pop();
       for (const line of lines) {
         if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
-        try { const d = JSON.parse(line.slice(6)).choices[0].delta; answer += d.content || ''; } catch {}
+        try {
+          const j = JSON.parse(line.slice(6));
+          if (j.qi_status) { status = j.qi_status; continue; }
+          if (j.error) throw new Error(j.error.message);
+          answer += j.choices[0].delta.content || '';
+        } catch (e) { if (e.message && e.message.startsWith('Qi brain')) throw e; }
       }
-      out.textContent = answer || '…'; $('#log').scrollTop = 1e9;
+      if (answer) setMd(out, answer); else out.textContent = status + ' …';
+      $('#log').scrollTop = 1e9;
     }
     chat.messages.push({ role: 'assistant', content: answer });
   } catch (e) {
