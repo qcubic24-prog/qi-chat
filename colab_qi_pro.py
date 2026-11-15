@@ -59,6 +59,13 @@ for line in tun.stdout:
 link = PAGE + '#' + urllib.parse.urlencode({'s': url, 'k': KEY, 'n': 'Qi Pro'})
 print('\n' + '=' * 70 + '\nQi Pro is ready. Open this link on your phone or computer:\n\n' + link +
       '\n\nChats are saved in Drive > Qi Trials > chats > qi-pro for 3 days.\nShare it only with your team. It works while this Colab session is running.\n' + '=' * 70, flush=True)
+seen = 0
 while True:
-    time.sleep(600)
-    log('still running')
+    time.sleep(20)
+    try:
+        lines = open(f'{W}/qi.log').read().splitlines()
+        for l in lines[seen:]:
+            if l.startswith(('round', 'brain error', 'Traceback', 'ERROR')): log(l)
+        seen = len(lines)
+    except Exception:
+        pass
