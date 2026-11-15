@@ -109,12 +109,16 @@ FRESH = re.compile(r"\b(latest|newest|today|tonight|tomorrow|yesterday|current(l
                    r"research|find out|check|20[2-3][0-9]|aaj|abhi)\b", re.I)
 
 
-def needs_web(msgs: list) -> bool:
+def last_user_text(msgs: list) -> str:
     last = next((m for m in reversed(msgs) if m.get('role') == 'user'), None)
     text = last.get('content') if last else ''
     if isinstance(text, list):
         text = ' '.join(p.get('text', '') for p in text if isinstance(p, dict))
-    return bool(FRESH.search(str(text or '')))
+    return str(text or '').strip()
+
+
+def needs_web(msgs: list) -> bool:
+    return bool(FRESH.search(last_user_text(msgs)))
 
 
 def status(text: str) -> str:
@@ -190,14 +194,21 @@ async def chat(req: Request):
     async def think():
         """Lets Qi use the web tools until it has its answer. Yields status lines, then ('done', answer)."""
         conv = list(body['messages'])
+        if force:
+            # Time-sensitive question: search first ourselves, so even a small brain answers from fresh results.
+            q = last_user_text(msgs)[:200]
+            yield ('status', 'Searching the web: ' + q[:80])
+            found = await run_tool('web_search', {'query': q})
+            call = {'id': 'qi-search-0', 'type': 'function', 'function': {'name': 'web_search', 'arguments': json.dumps({'query': q})}}
+            conv += [{'role': 'assistant', 'content': '', 'tool_calls': [call]},
+                     {'role': 'tool', 'tool_call_id': 'qi-search-0', 'name': 'web_search', 'content': found}]
         for rnd in range(ROUNDS + 1):
             b = dict(body, messages=conv, stream=False)
             b.setdefault('max_tokens', 2048)
+            b.setdefault('repeat_penalty', 1.1)
             t0 = time.time()
             if use_web and rnd < ROUNDS:
                 b['tools'] = TOOLS
-                if rnd == 0 and force:
-                    b['tool_choice'] = 'required'   # time-sensitive question: look it up instead of guessing
             r = await client.post(UP + '/v1/chat/completions', json=b)
             if r.status_code != 200:
                 yield ('error', r.status_code, r.text)
