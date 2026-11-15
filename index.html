@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Qi Chat</title>
+<meta name="theme-color" content="#f26b1d">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root { --o:#f26b1d; --o2:#fff3eb; --ink:#1d1d1f; --mute:#6b6b70; --line:#ececef; --bg:#ffffff; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
+    font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  body { display:flex; flex-direction:column; height:100dvh; }
+  header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); }
+  header .logo { width:30px; height:30px; border-radius:9px; background:var(--o); color:#fff; display:grid; place-items:center; font-weight:700; }
+  header h1 { font-size:17px; margin:0; flex:1; }
+  header select { max-width:46vw; font:inherit; font-size:14px; padding:6px 8px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+  .btn { border:0; background:none; font:inherit; color:var(--o); font-weight:600; padding:6px 8px; border-radius:8px; cursor:pointer; }
+  .btn:hover { background:var(--o2); }
+  #log { flex:1; overflow-y:auto; padding:16px 14px 8px; }
+  .msg { max-width:760px; margin:0 auto 12px; display:flex; }
+  .msg.user { justify-content:flex-end; }
+  .bubble { padding:10px 14px; border-radius:16px; white-space:pre-wrap; word-wrap:break-word; max-width:88%; }
+  .user .bubble { background:var(--o); color:#fff; border-bottom-right-radius:5px; }
+  .qi .bubble { background:var(--o2); border-bottom-left-radius:5px; }
+  .note { text-align:center; color:var(--mute); font-size:14px; margin:24px auto; max-width:520px; }
+  form { display:flex; gap:8px; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); max-width:790px; width:100%; margin:0 auto; }
+  textarea { flex:1; resize:none; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:14px; max-height:140px; outline:none; }
+  textarea:focus { border-color:var(--o); }
+  form button { background:var(--o); color:#fff; border:0; border-radius:14px; padding:0 18px; font:inherit; font-weight:600; cursor:pointer; }
+  form button:disabled { opacity:.5; }
+  dialog { border:0; border-radius:16px; padding:20px; width:min(440px, 92vw); }
+  dialog::backdrop { background:rgba(0,0,0,.3); }
+  dialog label { display:block; font-size:14px; color:var(--mute); margin:10px 0 4px; }
+  dialog input { width:100%; font:inherit; padding:9px 10px; border:1px solid var(--line); border-radius:10px; }
+  .row { display:flex; justify-content:space-between; gap:8px; margin-top:16px; }
+  .status { font-size:12px; color:var(--mute); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">Qi</div>
+  <h1>Qi Chat</h1>
+  <select id="server" aria-label="Qi server"></select>
+  <button class="btn" id="newChat" title="New chat">New</button>
+  <button class="btn" id="addBtn" title="Add a Qi server">+</button>
+</header>
+<div id="log"></div>
+<form id="form">
+  <textarea id="input" rows="1" placeholder="Message Qi…" autocomplete="off"></textarea>
+  <button id="send">Send</button>
+</form>
+
+<dialog id="dlg">
+  <h3 style="margin:0">Add a Qi server</h3>
+  <label for="dName">Name</label><input id="dName" placeholder="Qi Ultra (Kaggle)">
+  <label for="dUrl">Server address</label><input id="dUrl" placeholder="https://….trycloudflare.com">
+  <label for="dKey">Key</label><input id="dKey" placeholder="qi-…">
+  <div class="row">
+    <button class="btn" id="dDel" style="color:#b3261e">Remove this one</button>
+    <span><button class="btn" id="dCancel">Cancel</button> <button class="btn" id="dSave">Save</button></span>
+  </div>
+</dialog>
+
+<script>
+const $ = s => document.querySelector(s);
+const store = {
+  get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+};
+let servers = store.get('qi.servers', []);
+let current = store.get('qi.current', 0);
+let chat = store.get('qi.chat', { id: crypto.randomUUID(), messages: [] });
+let busy = false;
+
+// A link like  …/qi-chat/#s=https://x&k=key&n=Qi%20Ultra  adds that server in one tap.
+(function fromLink() {
+  const h = new URLSearchParams(location.hash.slice(1));
+  if (!h.get('s')) return;
+  const s = { name: h.get('n') || 'Qi', url: h.get('s').replace(/\/+$/, ''), key: h.get('k') || '' };
+  const i = servers.findIndex(x => x.name === s.name);
+  if (i >= 0) servers[i] = s; else servers.push(s);
+  current = i >= 0 ? i : servers.length - 1;
+  store.set('qi.servers', servers); store.set('qi.current', current);
+  history.replaceState(null, '', location.pathname);
+})();
+
+function fillServers() {
+  const sel = $('#server'); sel.innerHTML = '';
+  servers.forEach((s, i) => sel.add(new Option(s.name, i)));
+  if (!servers.length) sel.add(new Option('No server yet', -1));
+  sel.value = servers.length ? Math.min(current, servers.length - 1) : -1;
+}
+
+function bubble(role, text) {
+  const row = document.createElement('div'); row.className = 'msg ' + (role === 'user' ? 'user' : 'qi');
+  const b = document.createElement('div'); b.className = 'bubble'; b.textContent = text;
+  row.append(b); $('#log').append(row); $('#log').scrollTop = 1e9; return b;
+}
+
+function render() {
+  $('#log').innerHTML = '';
+  if (!servers.length) {
+    $('#log').innerHTML = '<p class="note">Open the Qi link your admin sent you, or tap <b>+</b> to add a Qi server address and key.</p>';
+  } else if (!chat.messages.length) {
+    $('#log').innerHTML = '<p class="note">Hi! I\'m Qi by Q-CUBIC. Ask me anything.</p>';
+  }
+  chat.messages.forEach(m => bubble(m.role, m.content));
+}
+
+async function send(text) {
+  const s = servers[current];
+  if (!s) { $('#dlg').showModal(); return; }
+  chat.messages.push({ role: 'user', content: text });
+  if (chat.messages.length === 1) $('#log').innerHTML = '';
+  bubble('user', text);
+  const out = bubble('assistant', '…');
+  busy = true; $('#send').disabled = true;
+  let answer = '';
+  try {
+    const r = await fetch(s.url + '/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.key },
+      body: JSON.stringify({ messages: chat.messages.slice(-20), stream: true, qi_chat: chat.id, temperature: 0.7 })
+    });
+    if (!r.ok) {
+      let msg = 'Qi could not answer (' + r.status + ').';
+      try { msg = (await r.json()).error.message || msg; } catch {}
+      throw new Error(msg);
+    }
+    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
+    while (true) {
+      const { value, done } = await reader.read(); if (done) break;
+      buf += dec.decode(value, { stream: true });
+      const lines = buf.split('\n'); buf = lines.pop();
+      for (const line of lines) {
+        if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
+        try { const d = JSON.parse(line.slice(6)).choices[0].delta; answer += d.content || ''; } catch {}
+      }
+      out.textContent = answer || '…'; $('#log').scrollTop = 1e9;
+    }
+    chat.messages.push({ role: 'assistant', content: answer });
+  } catch (e) {
+    out.textContent = e.message.includes('Failed to fetch')
+      ? 'Qi is not reachable right now. The server may be switched off; ask your admin for a fresh Qi link.'
+      : e.message;
+    chat.messages.pop();
+  }
+  store.set('qi.chat', chat);
+  busy = false; $('#send').disabled = false;
+}
+
+$('#form').addEventListener('submit', e => {
+  e.preventDefault(); const t = $('#input').value.trim();
+  if (!t || busy) return; $('#input').value = ''; autosize(); send(t);
+});
+$('#input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches) { e.preventDefault(); $('#form').requestSubmit(); }
+});
+function autosize() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
+$('#input').addEventListener('input', autosize);
+$('#newChat').onclick = () => { chat = { id: crypto.randomUUID(), messages: [] }; store.set('qi.chat', chat); render(); };
+$('#server').onchange = e => { current = +e.target.value; store.set('qi.current', current); };
+
+let editing = -1;
+$('#addBtn').onclick = () => {
+  editing = servers.length ? current : -1;
+  const s = servers[editing] || { name: '', url: '', key: '' };
+  $('#dName').value = s.name; $('#dUrl').value = s.url; $('#dKey').value = s.key;
+  $('#dDel').style.visibility = editing >= 0 ? 'visible' : 'hidden';
+  $('#dlg').showModal();
+};
+$('#dCancel').onclick = e => { e.preventDefault(); $('#dlg').close(); };
+$('#dSave').onclick = e => {
+  e.preventDefault();
+  const s = { name: $('#dName').value.trim() || 'Qi', url: $('#dUrl').value.trim().replace(/\/+$/, ''), key: $('#dKey').value.trim() };
+  if (!s.url.startsWith('https://')) { alertBox('The address must start with https://'); return; }
+  const i = servers.findIndex(x => x.name === s.name);
+  if (i >= 0) { servers[i] = s; current = i; } else { servers.push(s); current = servers.length - 1; }
+  store.set('qi.servers', servers); store.set('qi.current', current); fillServers(); render(); $('#dlg').close();
+};
+$('#dDel').onclick = e => {
+  e.preventDefault(); if (editing < 0) return;
+  servers.splice(editing, 1); current = 0;
+  store.set('qi.servers', servers); store.set('qi.current', current); fillServers(); render(); $('#dlg').close();
+};
+function alertBox(t) { $('#dUrl').setCustomValidity(t); $('#dUrl').reportValidity(); setTimeout(() => $('#dUrl').setCustomValidity(''), 3000); }
+
+fillServers(); render();
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+</script>
+</body>
+</html>
