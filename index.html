@@ -68,6 +68,7 @@
 <dialog id="menuDlg">
   <h3 style="margin:0">Settings</h3>
   <div class="row" style="flex-direction:column;align-items:flex-start">
+    <button class="btn" id="mUltra" style="display:none">Start Qi Ultra on Kaggle (admin)</button>
     <button class="btn" id="mRefresh">Check models again</button>
     <button class="btn" id="mAdd">Add a Qi server by hand</button>
     <button class="btn" id="mClose">Close</button>
@@ -102,6 +103,11 @@ let manual = store.get('qi.servers', []);          // servers added by hand or f
 let currentName = store.get('qi.currentName', '');
 let chat = store.get('qi.chat', { id: crypto.randomUUID(), messages: [] });
 let busy = false;
+
+// Admin: open the site once as …/qi-chat/#admin on your own device to show the admin button there.
+if (location.hash === '#admin') { store.set('qi.admin', true); history.replaceState(null, '', location.pathname); }
+const ADMIN = store.get('qi.admin', false);
+const START_ULTRA = 'https://github.com/qcubic24-prog/qi-chat/actions/workflows/start-qi-ultra.yml';
 
 (function fromLink() {
   const h = new URLSearchParams(location.hash.slice(1));
@@ -280,6 +286,14 @@ $('#server').onchange = e => {
 
 $('#menuBtn').onclick = () => $('#menuDlg').showModal();
 $('#mClose').onclick = () => $('#menuDlg').close();
+if (ADMIN) $('#mUltra').style.display = '';
+$('#mUltra').onclick = () => {
+  $('#menuDlg').close();
+  const u = models.find(m => m.slug === 'qi-ultra');
+  if (u && u.online) { $('#bar').innerHTML = '<span class="dot on"></span><b>Qi Ultra</b> is already running.'; return; }
+  window.open(START_ULTRA, '_blank', 'noopener');
+  $('#bar').innerHTML = 'On the GitHub page, press <b>Run workflow</b>, then the green <b>Run workflow</b>. Qi Ultra appears here in about 5 minutes.';
+};
 $('#mRefresh').onclick = () => { $('#menuDlg').close(); $('#bar').textContent = 'Checking Qi models…'; loadModels(); };
 $('#mAdd').onclick = () => { $('#menuDlg').close(); openAdd(); };
 
