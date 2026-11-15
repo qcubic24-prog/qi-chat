@@ -145,7 +145,7 @@ async function check(s) {
 
 async function loadModels() {
   try {
-    const r = await fetch(BOARD + '&t=' + Date.now(), { cache: 'no-store' });
+    const r = await fetch(BOARD, { cache: 'no-store' });
     const notes = {};
     for (const line of (await r.text()).split('\n')) {
       try {
