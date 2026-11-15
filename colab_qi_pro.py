@@ -1,6 +1,6 @@
 # Qi Pro on Google Colab: runs the Qi Pro brain from your "Qi Trials" Drive folder, saves chats to Drive for 3 days,
 # and prints a Qi Chat link. Runtime > Change runtime type > T4 GPU (works on CPU too, but slower).
-import os, subprocess, time, re, glob, secrets, urllib.parse, urllib.request, sys, shutil
+import threading, os, subprocess, time, re, glob, secrets, urllib.parse, urllib.request, sys, shutil
 TRIALS = '/content/drive/MyDrive/Qi Trials'
 if not os.path.isdir(TRIALS): raise SystemExit('Drive is not connected: run drive.mount first')
 SRC = f'{TRIALS}/qi-pro-brain/qi-pro-brain.gguf'
@@ -24,6 +24,7 @@ srv = glob.glob(f'{W}/ll/**/llama-server', recursive=True)[0]
 libs = sorted({os.path.dirname(p) for p in glob.glob(f'{W}/ll/**/*.so*', recursive=True)})
 if not os.path.exists(f'{W}/cloudflared'):
     sh(f'curl -sL -o {W}/cloudflared https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 && chmod +x {W}/cloudflared')
+sh(f'curl -sL -o {W}/qi_register.py "https://qcubic24-prog.github.io/qi-chat/qi_register.py?t={int(time.time())}"')
 sh(f'curl -sL -o {W}/qi_server.py "https://qcubic24-prog.github.io/qi-chat/qi_server.py?t={int(time.time())}"')
 
 model = f'{W}/qi-pro-brain.gguf'
@@ -47,21 +48,38 @@ log('Qi Pro brain is running', 'on the GPU' if gpu else 'on the CPU')
 
 KEY = 'qi-' + secrets.token_hex(8)
 os.makedirs(STORE, exist_ok=True)
-qenv = dict(os.environ, QI_KEY=KEY, QI_NAME='Qi Pro', QI_STORE=STORE, QI_KEEP_DAYS='3')
+qenv = dict(os.environ, QI_KEY=KEY, QI_NAME='Qi Pro', QI_STORE=STORE, QI_KEEP_DAYS='3', QI_ABOUT='Google Colab (one T4 GPU, the fast Qi Pro brain)', QI_SLOTS='2')
 subprocess.Popen([sys.executable, '-m', 'uvicorn', '--app-dir', W, 'qi_server:app', '--host', '127.0.0.1', '--port', '8090'],
                  stdout=open(f'{W}/qi.log', 'w'), stderr=subprocess.STDOUT, env=qenv)
-tun = subprocess.Popen([f'{W}/cloudflared', 'tunnel', '--no-autoupdate', '--url', 'http://127.0.0.1:8090'],
-                       stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-url = None
-for line in tun.stdout:
-    m = re.search(r'https://[a-z0-9-]+\.trycloudflare\.com', line)
-    if m: url = m.group(0); break
+def tunnel():
+    t = subprocess.Popen([f'{W}/cloudflared', 'tunnel', '--no-autoupdate', '--url', 'http://127.0.0.1:8090'],
+                         stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    for line in t.stdout:
+        m = re.search(r'https://[a-z0-9-]+\.trycloudflare\.com', line)
+        if m:
+            threading.Thread(target=lambda: [None for _ in t.stdout], daemon=True).start()   # keep its log flowing
+            return t, m.group(0)
+    return t, None
+
+
+sys.path.insert(0, W)
+import qi_register
+def announce(url):
+    qi_register.publish('qi-pro', {'name': 'Qi Pro', 'url': url, 'key': KEY, 'about': 'Google Colab (one T4 GPU, the fast Qi Pro brain)', 'started': int(time.time())})
+
+
+tun, url = tunnel()
+announce(url)
 link = PAGE + '#' + urllib.parse.urlencode({'s': url, 'k': KEY, 'n': 'Qi Pro'})
-print('\n' + '=' * 70 + '\nQi Pro is ready. Open this link on your phone or computer:\n\n' + link +
-      '\n\nChats are saved in Drive > Qi Trials > chats > qi-pro for 3 days.\nShare it only with your team. It works while this Colab session is running.\n' + '=' * 70, flush=True)
+print('\n' + '=' * 70 + '\nQi Pro is ready on the one-link website: ' + PAGE +
+      '\n\nDirect link (only if the website does not list it yet):\n' + link + '\n' + '=' * 70, flush=True)
 seen = 0
 while True:
     time.sleep(20)
+    if tun.poll() is not None:           # the tunnel dropped: open a new one and update the website
+        log('reconnecting the internet link')
+        tun, url = tunnel()
+        announce(url)
     try:
         lines = open(f'{W}/qi.log').read().splitlines()
         for l in lines[seen:]:

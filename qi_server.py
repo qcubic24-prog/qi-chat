@@ -14,13 +14,20 @@ STORE = os.environ.get('QI_STORE', '/tmp/qi-chats')
 KEEP_DAYS = float(os.environ.get('QI_KEEP_DAYS', '7'))
 WEB = os.environ.get('QI_WEB', 'on') != 'off'
 ROUNDS = int(os.environ.get('QI_WEB_ROUNDS', '6'))
+ABOUT = os.environ.get('QI_ABOUT', '')          # where this Qi runs, e.g. "Kaggle, two T4 GPUs"
+SLOTS = int(os.environ.get('QI_SLOTS', '2'))     # answers the brain can write at the same time
+STATS = {'busy': 0, 'served': 0, 'started': time.time()}
 
 
 def identity():
     t = (f"You are {NAME}, an AI assistant made by Q-CUBIC, an Indian AI startup founded by Pruthvi Setty. "
-         "If asked who made you or what model you are, say you are Qi by Q-CUBIC. "
+         f"If asked who made you or what model you are, say you are {NAME} by Q-CUBIC. "
          "Be helpful, clear and friendly. Answer in the user's language. "
          f"Today is {datetime.date.today().strftime('%A, %d %B %Y')}.")
+    if ABOUT:
+        t += (f" Facts about this {NAME} server (use them if asked about capacity or how many people can use you): "
+              f"it runs on {ABOUT}; it writes {SLOTS} answers at the same time and other people wait in line for a few "
+              "seconds; it is a test server, so it is switched on and off by Q-CUBIC. Do not invent other numbers.")
     if WEB:
         t += (" You have internet access through two tools: web_search (find pages) and open_page (read a page). "
               "Use them whenever the question needs current or recent information, prices, news, facts you are not sure of, "
@@ -183,6 +190,16 @@ async def health():
     return {'ok': ok, 'name': NAME}
 
 
+@app.get('/qi/stats')
+async def stats(req: Request):
+    if not allowed(req):
+        return JSONResponse({'error': 'wrong key'}, 401)
+    d = os.path.join(STORE, datetime.date.today().isoformat())
+    today = len(os.listdir(d)) if os.path.isdir(d) else 0
+    return {'name': NAME, 'about': ABOUT, 'slots': SLOTS, 'busy': STATS['busy'], 'served': STATS['served'],
+            'chats_today': today, 'up_minutes': int((time.time() - STATS['started']) / 60)}
+
+
 @app.get('/v1/models')
 async def models(req: Request):
     if not allowed(req):
@@ -195,6 +212,7 @@ async def chat(req: Request):
     if not allowed(req):
         return JSONResponse({'error': {'message': 'Wrong key. Ask the admin for the Qi link again.'}}, 401)
     body = await req.json()
+    STATS['served'] += 1
     chat_id = str(body.pop('qi_chat', '') or uuid.uuid4().hex)
     msgs = [m for m in body.get('messages', []) if m.get('role') != 'system']
     body['messages'] = [{'role': 'system', 'content': identity()}] + msgs
@@ -205,6 +223,14 @@ async def chat(req: Request):
     force = use_web and needs_web(msgs)
 
     async def think():
+        STATS['busy'] += 1
+        try:
+            async for ev in _think():
+                yield ev
+        finally:
+            STATS['busy'] -= 1
+
+    async def _think():
         """Lets Qi use the web tools until it has its answer. Yields status lines, then ('done', answer)."""
         conv = list(body['messages'])
         if force:

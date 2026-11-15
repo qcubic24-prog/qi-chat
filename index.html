@@ -16,7 +16,7 @@
   body { display:flex; flex-direction:column; height:100dvh; }
   header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); }
   header .logo { width:30px; height:30px; border-radius:9px; background:var(--o); color:#fff; display:grid; place-items:center; font-weight:700; }
-  header h1 { font-size:17px; margin:0; flex:1; }
+  header h1 { font-size:17px; margin:0; flex:1; white-space:nowrap; }
   header select { max-width:46vw; font:inherit; font-size:14px; padding:6px 8px; border:1px solid var(--line); border-radius:10px; background:#fff; }
   .btn { border:0; background:none; font:inherit; color:var(--o); font-weight:600; padding:6px 8px; border-radius:8px; cursor:pointer; }
   .btn:hover { background:var(--o2); }
@@ -41,25 +41,50 @@
   .bubble pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; white-space:pre; }
   .bubble code { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:14px; }
   .bubble a { color:#b8470c; word-break:break-all; }
+  #bar { font-size:12px; color:var(--mute); padding:4px 14px; border-bottom:1px solid var(--line); text-align:center; min-height:24px; }
+  #bar b { color:var(--ink); font-weight:600; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#bbb; margin-right:5px; vertical-align:middle; }
+  .dot.on { background:#1f9d55; }
+  .switch { text-align:center; color:var(--mute); font-size:12px; margin:6px auto 14px; }
+  dialog p { color:var(--mute); font-size:14px; margin:6px 0 0; }
 </style>
 </head>
 <body>
 <header>
   <div class="logo">Qi</div>
   <h1>Qi Chat</h1>
-  <select id="server" aria-label="Qi server"></select>
+  <select id="server" aria-label="Choose a Qi model"></select>
   <button class="btn" id="newChat" title="New chat">New</button>
-  <button class="btn" id="addBtn" title="Add a Qi server">+</button>
+  <button class="btn" id="menuBtn" title="Settings">⋯</button>
 </header>
+<div id="bar">Looking for Qi models…</div>
 <div id="log"></div>
 <form id="form">
   <textarea id="input" rows="1" placeholder="Message Qi…" autocomplete="off"></textarea>
   <button id="send">Send</button>
 </form>
 
+<dialog id="teamDlg">
+  <h3 style="margin:0">Welcome to Qi Chat</h3>
+  <p>Type the team password from your admin. You only need to do this once on this device.</p>
+  <label for="teamPw">Team password</label><input id="teamPw" type="password" autocomplete="current-password">
+  <p id="teamErr" style="color:#b3261e"></p>
+  <div class="row"><button class="btn" id="teamSkip">Not now</button><button class="btn" id="teamOk">Continue</button></div>
+</dialog>
+
+<dialog id="menuDlg">
+  <h3 style="margin:0">Settings</h3>
+  <div class="row" style="flex-direction:column;align-items:flex-start">
+    <button class="btn" id="mRefresh">Check models again</button>
+    <button class="btn" id="mTeam">Change team password</button>
+    <button class="btn" id="mAdd">Add a Qi server by hand</button>
+    <button class="btn" id="mClose">Close</button>
+  </div>
+</dialog>
+
 <dialog id="dlg">
   <h3 style="margin:0">Add a Qi server</h3>
-  <label for="dName">Name</label><input id="dName" placeholder="Qi Ultra (Kaggle)">
+  <label for="dName">Name</label><input id="dName" placeholder="Qi Test">
   <label for="dUrl">Server address (or paste the whole Qi link here)</label><input id="dUrl" placeholder="https://….trycloudflare.com">
   <label for="dKey">Key</label><input id="dKey" placeholder="qi-…">
   <div class="row">
@@ -74,31 +99,105 @@ const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
-let servers = store.get('qi.servers', []);
-let current = store.get('qi.current', 0);
+// The Qi models of Q-CUBIC. Each server puts its current address in servers/<slug>.json, locked with the team password.
+const MODELS = [
+  { slug: 'qi-ultra',  name: 'Qi Ultra',     where: 'Kaggle' },
+  { slug: 'qi-pro',    name: 'Qi Pro',       where: 'Google Colab' },
+  { slug: 'qi-oracle', name: 'Qi Always On', where: 'Oracle Cloud' },
+];
+let models = MODELS.map(m => ({ ...m, url: '', key: '', online: false, stats: null }));
+let manual = store.get('qi.servers', []);          // servers added by hand or from an old link
+let currentName = store.get('qi.currentName', '');
 let chat = store.get('qi.chat', { id: crypto.randomUUID(), messages: [] });
 let busy = false;
 
-// A link like  …/qi-chat/#s=https://x&k=key&n=Qi%20Ultra  adds that server in one tap.
 (function fromLink() {
   const h = new URLSearchParams(location.hash.slice(1));
   if (!h.get('s')) return;
   const s = { name: h.get('n') || 'Qi', url: h.get('s').replace(/\/+$/, ''), key: h.get('k') || '' };
-  const i = servers.findIndex(x => x.name === s.name);
-  if (i >= 0) servers[i] = s; else servers.push(s);
-  current = i >= 0 ? i : servers.length - 1;
-  store.set('qi.servers', servers); store.set('qi.current', current);
+  const i = manual.findIndex(x => x.name === s.name);
+  if (i >= 0) manual[i] = s; else manual.push(s);
+  currentName = s.name; store.set('qi.servers', manual); store.set('qi.currentName', currentName);
   history.replaceState(null, '', location.pathname);
 })();
 
-function fillServers() {
-  const sel = $('#server'); sel.innerHTML = '';
-  servers.forEach((s, i) => sel.add(new Option(s.name, i)));
-  if (!servers.length) sel.add(new Option('No server yet', -1));
-  sel.value = servers.length ? Math.min(current, servers.length - 1) : -1;
+function all() {
+  // A registered model wins over an old hand-added entry with the same name while it is online.
+  const list = models.map(m => ({ ...m, auto: true }));
+  for (const s of manual) {
+    const i = list.findIndex(x => x.name === s.name);
+    if (i >= 0 && !list[i].online) list[i] = { ...list[i], url: s.url, key: s.key, online: !!s.online, stats: s.stats };
+    else if (i < 0) list.push({ ...s, where: 'added by hand' });
+  }
+  return list;
+}
+let picked = false;   // true once the person chooses a model in this visit
+function current() {
+  const l = all(), want = l.find(x => x.name === currentName);
+  if (want && (want.online || picked)) return want;
+  return l.find(x => x.online) || want || l[0];
 }
 
-// Small, safe markdown: everything is escaped first, then bold, italics, code, headings, lists and links.
+const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+async function unlock(doc, password) {
+  const c = crypto.subtle;
+  const base = await c.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
+  const key = await c.deriveKey({ name: 'PBKDF2', salt: b64(doc.salt), iterations: 200000, hash: 'SHA-256' },
+                                base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
+  return JSON.parse(new TextDecoder().decode(await c.decrypt({ name: 'AES-GCM', iv: b64(doc.iv) }, key, b64(doc.data))));
+}
+function timeout(ms) { const a = new AbortController(); setTimeout(() => a.abort(), ms); return a.signal; }
+async function check(s) {
+  if (!s.url) return { online: false, stats: null };
+  try {
+    const h = await fetch(s.url + '/health', { signal: timeout(8000) });
+    if (!h.ok) return { online: false, stats: null };
+    let stats = null;
+    try { const r = await fetch(s.url + '/qi/stats', { headers: { Authorization: 'Bearer ' + s.key }, signal: timeout(8000) }); if (r.ok) stats = await r.json(); } catch {}
+    return { online: true, stats };
+  } catch { return { online: false, stats: null }; }
+}
+
+async function loadModels(askIfNeeded) {
+  const pw = store.get('qi.team', '');
+  let wrong = false, found = 0;
+  await Promise.all(models.map(async m => {
+    try {
+      const r = await fetch('servers/' + m.slug + '.json?t=' + Date.now(), { cache: 'no-store' });
+      if (!r.ok) return;
+      found++;
+      const doc = await r.json();
+      m.updated = doc.updated;
+      if (!pw) return;
+      try { const info = await unlock(doc, pw); m.url = info.url; m.key = info.key; m.about = info.about; }
+      catch { wrong = true; }
+    } catch {}
+  }));
+  await Promise.all([...models, ...manual].map(async s => Object.assign(s, await check(s))));
+  fillServers(); showBar();
+  if (askIfNeeded && found && (!pw || wrong)) askTeam(wrong ? 'That team password did not open the Qi list. Please try again.' : '');
+}
+
+function fillServers() {
+  const sel = $('#server'); sel.innerHTML = '';
+  for (const s of all()) sel.add(new Option((s.online ? '● ' : '○ ') + s.name + (s.online ? '' : ' (off)'), s.name));
+  const c = current(); if (c) sel.value = c.name;
+}
+function showBar() {
+  const c = current(), bar = $('#bar');
+  if (!c) { bar.textContent = 'No Qi models yet.'; return; }
+  if (!c.online) {
+    const on = all().filter(x => x.online).map(x => x.name);
+    bar.innerHTML = '<span class="dot"></span><b>' + c.name + '</b> is switched off right now' +
+      (on.length ? '. Online: ' + on.join(', ') + '.' : '. No Qi model is on right now; ask your admin to start one.');
+    return;
+  }
+  const st = c.stats, bits = ['<span class="dot on"></span><b>' + c.name + '</b> is online'];
+  if (c.where) bits.push('on ' + c.where);
+  if (st) { bits.push(st.busy + ' of ' + st.slots + ' answering now'); bits.push(st.chats_today + ' chats today'); }
+  bar.innerHTML = bits.join(' · ');
+}
+
 function md(t) {
   const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const blocks = t.split(/```/);
@@ -123,20 +222,18 @@ function bubble(role, text) {
   if (role === 'user') b.textContent = text; else setMd(b, text);
   row.append(b); $('#log').append(row); $('#log').scrollTop = 1e9; return b;
 }
-
+function switchNote(name) { const d = document.createElement('div'); d.className = 'switch'; d.textContent = 'Now talking to ' + name; $('#log').append(d); }
 function render() {
   $('#log').innerHTML = '';
-  if (!servers.length) {
-    $('#log').innerHTML = '<p class="note">Open the Qi link your admin sent you, or tap <b>+</b> to add a Qi server address and key.</p>';
-  } else if (!chat.messages.length) {
-    $('#log').innerHTML = '<p class="note">Hi! I\'m Qi by Q-CUBIC. Ask me anything.</p>';
+  if (!chat.messages.length) $('#log').innerHTML = '<p class="note">Hi! I\'m Qi by Q-CUBIC. Choose a Qi model at the top and ask me anything.</p>';
+  for (const m of chat.messages) {
+    if (m.role === 'switch') switchNote(m.content); else bubble(m.role, m.content);
   }
-  chat.messages.forEach(m => bubble(m.role, m.content));
 }
 
 async function send(text) {
-  const s = servers[current];
-  if (!s) { $('#addBtn').click(); return; }
+  const s = current();
+  if (!s || !s.url) { $('#bar').innerHTML = 'No Qi model is available yet. Tap ⋯ to check again or add one.'; return; }
   chat.messages.push({ role: 'user', content: text });
   if (chat.messages.length === 1) $('#log').innerHTML = '';
   bubble('user', text);
@@ -144,13 +241,14 @@ async function send(text) {
   busy = true; $('#send').disabled = true;
   let answer = '', status = 'Thinking';
   try {
+    const history = chat.messages.filter(m => m.role !== 'switch').slice(-20);
     const r = await fetch(s.url + '/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.key },
-      body: JSON.stringify({ messages: chat.messages.slice(-20), stream: true, qi_chat: chat.id, temperature: 0.7 })
+      body: JSON.stringify({ messages: history, stream: true, qi_chat: chat.id, temperature: 0.7 })
     });
     if (!r.ok) {
-      let msg = 'Qi could not answer (' + r.status + ').';
+      let msg = s.name + ' could not answer (' + r.status + ').';
       try { msg = (await r.json()).error.message || msg; } catch {}
       throw new Error(msg);
     }
@@ -173,10 +271,11 @@ async function send(text) {
     }
     chat.messages.push({ role: 'assistant', content: answer });
   } catch (e) {
-    out.textContent = e.message.includes('Failed to fetch')
-      ? 'Qi is not reachable right now. The server may be switched off; ask your admin for a fresh Qi link.'
+    out.textContent = (e.message || '').includes('Failed to fetch') || e.name === 'TypeError'
+      ? s.name + ' is not reachable right now; it may have been switched off. Pick another Qi model at the top.'
       : e.message;
     chat.messages.pop();
+    loadModels(false);
   }
   store.set('qi.chat', chat);
   busy = false; $('#send').disabled = false;
@@ -192,38 +291,49 @@ $('#input').addEventListener('keydown', e => {
 function autosize() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
 $('#input').addEventListener('input', autosize);
 $('#newChat').onclick = () => { chat = { id: crypto.randomUUID(), messages: [] }; store.set('qi.chat', chat); render(); };
-$('#server').onchange = e => { current = +e.target.value; store.set('qi.current', current); };
+$('#server').onchange = e => {
+  currentName = e.target.value; picked = true; store.set('qi.currentName', currentName); showBar();
+  if (chat.messages.length) { chat.messages.push({ role: 'switch', content: currentName }); store.set('qi.chat', chat); switchNote(currentName); $('#log').scrollTop = 1e9; }
+};
+
+function askTeam(err) { $('#teamErr').textContent = err || ''; $('#teamPw').value = ''; $('#teamDlg').showModal(); }
+$('#teamOk').onclick = e => { e.preventDefault(); store.set('qi.team', $('#teamPw').value); $('#teamDlg').close(); $('#bar').textContent = 'Opening the Qi list…'; loadModels(true); };
+$('#teamSkip').onclick = e => { e.preventDefault(); $('#teamDlg').close(); };
+$('#menuBtn').onclick = () => $('#menuDlg').showModal();
+$('#mClose').onclick = () => $('#menuDlg').close();
+$('#mRefresh').onclick = () => { $('#menuDlg').close(); $('#bar').textContent = 'Checking Qi models…'; loadModels(true); };
+$('#mTeam').onclick = () => { $('#menuDlg').close(); askTeam(''); };
+$('#mAdd').onclick = () => { $('#menuDlg').close(); openAdd(); };
 
 let editing = -1;
-$('#addBtn').onclick = () => {
-  editing = servers.length ? current : -1;
-  const s = servers[editing] || { name: '', url: '', key: '' };
+function openAdd() {
+  editing = manual.findIndex(x => x.name === currentName);
+  const s = manual[editing] || { name: '', url: '', key: '' };
   $('#dName').value = s.name; $('#dUrl').value = s.url; $('#dKey').value = s.key;
   $('#dDel').style.visibility = editing >= 0 ? 'visible' : 'hidden';
   $('#dlg').showModal();
-};
+}
 $('#dCancel').onclick = e => { e.preventDefault(); $('#dlg').close(); };
 $('#dSave').onclick = e => {
   e.preventDefault();
   let s = { name: $('#dName').value.trim() || 'Qi', url: $('#dUrl').value.trim().replace(/\/+$/, ''), key: $('#dKey').value.trim() };
-  // The whole Qi link can be pasted into the address box; its server, key and name are read from it.
   if (s.url.includes('#s=')) {
     const h = new URLSearchParams(s.url.split('#')[1]);
     s = { name: h.get('n') || s.name, url: (h.get('s') || '').replace(/\/+$/, ''), key: h.get('k') || s.key };
   }
-  if (!s.url.startsWith('https://')) { alertBox('The address must start with https://'); return; }
-  const i = servers.findIndex(x => x.name === s.name);
-  if (i >= 0) { servers[i] = s; current = i; } else { servers.push(s); current = servers.length - 1; }
-  store.set('qi.servers', servers); store.set('qi.current', current); fillServers(); render(); $('#dlg').close();
+  if (!s.url.startsWith('https://')) { $('#dUrl').setCustomValidity('The address must start with https://'); $('#dUrl').reportValidity(); setTimeout(() => $('#dUrl').setCustomValidity(''), 3000); return; }
+  const i = manual.findIndex(x => x.name === s.name);
+  if (i >= 0) manual[i] = s; else manual.push(s);
+  currentName = s.name; store.set('qi.servers', manual); store.set('qi.currentName', currentName);
+  $('#dlg').close(); loadModels(false);
 };
 $('#dDel').onclick = e => {
   e.preventDefault(); if (editing < 0) return;
-  servers.splice(editing, 1); current = 0;
-  store.set('qi.servers', servers); store.set('qi.current', current); fillServers(); render(); $('#dlg').close();
+  manual.splice(editing, 1); store.set('qi.servers', manual); $('#dlg').close(); loadModels(false);
 };
-function alertBox(t) { $('#dUrl').setCustomValidity(t); $('#dUrl').reportValidity(); setTimeout(() => $('#dUrl').setCustomValidity(''), 3000); }
 
-fillServers(); render();
+render(); fillServers(); loadModels(true);
+setInterval(() => { if (!busy && document.visibilityState === 'visible') loadModels(false); }, 30000);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
