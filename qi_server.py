@@ -192,6 +192,8 @@ async def chat(req: Request):
         conv = list(body['messages'])
         for rnd in range(ROUNDS + 1):
             b = dict(body, messages=conv, stream=False)
+            b.setdefault('max_tokens', 2048)
+            t0 = time.time()
             if use_web and rnd < ROUNDS:
                 b['tools'] = TOOLS
                 if rnd == 0 and force:
@@ -202,6 +204,8 @@ async def chat(req: Request):
                 return
             m = r.json()['choices'][0]['message']
             calls = m.get('tool_calls') or []
+            print(f'round {rnd}: {time.time() - t0:.0f}s, tools={[c.get("function", {}).get("name") for c in calls]}, '
+                  f'answer={len(m.get("content") or "")} chars', flush=True)
             if not calls:
                 yield ('done', m.get('content') or '')
                 return
@@ -232,13 +236,41 @@ async def chat(req: Request):
         return {'id': 'qi-' + uuid.uuid4().hex, 'object': 'chat.completion', 'model': NAME,
                 'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': answer}}]}
 
+    async def events():
+        """Runs think() and sends a keep-alive every 10 s, so tunnels do not cut a long answer."""
+        q = asyncio.Queue()
+
+        async def run():
+            try:
+                async for ev in think():
+                    await q.put(ev)
+            except Exception as e:
+                await q.put(('error', 500, repr(e)))
+            await q.put(None)
+        task = asyncio.create_task(run())
+        try:
+            while True:
+                try:
+                    ev = await asyncio.wait_for(q.get(), 10)
+                except asyncio.TimeoutError:
+                    yield ('ping',)
+                    continue
+                if ev is None:
+                    return
+                yield ev
+        finally:
+            task.cancel()
+
     async def gen():
         answer = ''
         yield status('Thinking…')
-        async for ev in think():
-            if ev[0] == 'status':
+        async for ev in events():
+            if ev[0] == 'ping':
+                yield ': keep-alive\n\n'
+            elif ev[0] == 'status':
                 yield status(ev[1])
             elif ev[0] == 'error':
+                print('brain error', ev, flush=True)
                 yield 'data: ' + json.dumps({'error': {'message': f'Qi brain error {ev[1]}'}}) + '\n\n'
                 yield 'data: [DONE]\n\n'
                 return
