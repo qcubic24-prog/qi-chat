@@ -24,7 +24,9 @@ def identity():
     if WEB:
         t += (" You have internet access through two tools: web_search (find pages) and open_page (read a page). "
               "Use them whenever the question needs current or recent information, prices, news, facts you are not sure of, "
-              "or when the user asks you to research, look up or check something. For research, search more than once and "
+              "or when the user asks you to research, look up or check something. Your built-in knowledge is out of date, so for "
+              "anything that may have changed recently (latest versions, news, prices, people in roles, events, weather, scores) "
+              "search first instead of answering from memory. For research, search more than once and "
               "open the best pages before answering. Never say you have no internet access. "
               "When you used the web, end with a short 'Sources:' list of the links you used.")
     return t
@@ -102,6 +104,19 @@ async def run_tool(name: str, args: dict) -> str:
     return 'unknown tool'
 
 
+FRESH = re.compile(r"\b(latest|newest|today|tonight|tomorrow|yesterday|current(ly)?|now|recent(ly)?|news|this (week|month|year)|"
+                   r"price|cost|rate|weather|score|result|release[sd]?|launch(ed)?|update[sd]?|version|who is|search|look up|"
+                   r"research|find out|check|20[2-3][0-9]|aaj|abhi)\b", re.I)
+
+
+def needs_web(msgs: list) -> bool:
+    last = next((m for m in reversed(msgs) if m.get('role') == 'user'), None)
+    text = last.get('content') if last else ''
+    if isinstance(text, list):
+        text = ' '.join(p.get('text', '') for p in text if isinstance(p, dict))
+    return bool(FRESH.search(str(text or '')))
+
+
 def status(text: str) -> str:
     return 'data: ' + json.dumps({'qi_status': text}, ensure_ascii=False) + '\n\n'
 
@@ -170,6 +185,7 @@ async def chat(req: Request):
     stream = bool(body.pop('stream', False))
     body.pop('stream_options', None)
     use_web = WEB and 'tools' not in body
+    force = use_web and needs_web(msgs)
 
     async def think():
         """Lets Qi use the web tools until it has its answer. Yields status lines, then ('done', answer)."""
@@ -178,6 +194,8 @@ async def chat(req: Request):
             b = dict(body, messages=conv, stream=False)
             if use_web and rnd < ROUNDS:
                 b['tools'] = TOOLS
+                if rnd == 0 and force:
+                    b['tool_choice'] = 'required'   # time-sensitive question: look it up instead of guessing
             r = await client.post(UP + '/v1/chat/completions', json=b)
             if r.status_code != 200:
                 yield ('error', r.status_code, r.text)
