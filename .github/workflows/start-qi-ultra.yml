@@ -9,11 +9,11 @@ jobs:
     steps:
       - name: Start Qi Ultra on Kaggle
         env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          KAGGLE_USERNAME: qcubic
+          KAGGLE_API_TOKEN: ${{ secrets.KAGGLE_API_TOKEN }}
           ULTRA_ID: ${{ secrets.QI_ULTRA_ID }}
         run: |
-          pip install -q kaggle
+          pip install -q 'kaggle>=1.8'
           KERNEL="$KAGGLE_USERNAME/qi-ultra-server"
           STATUS=$(kaggle kernels status "$KERNEL" 2>&1 || true)
           echo "$STATUS"
