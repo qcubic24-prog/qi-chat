@@ -65,7 +65,7 @@ while True:
     try:
         lines = open(f'{W}/qi.log').read().splitlines()
         for l in lines[seen:]:
-            if l.startswith(('round', 'brain error', 'Traceback', 'ERROR')): log(l)
+            if l.startswith(('round', 'search', 'brain error', 'Traceback', 'ERROR')): log(l)
         seen = len(lines)
     except Exception:
         pass

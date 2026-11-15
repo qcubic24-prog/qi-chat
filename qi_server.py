@@ -61,14 +61,25 @@ def public_host(host: str) -> bool:
         return False
 
 
+FILLER = re.compile(r"\b(please|kindly|keep it (short|brief)|in short|briefly|tell me|can you|could you|i want to know|explain)\b", re.I)
+
+
 def web_search(query: str) -> str:
-    try:
-        from ddgs import DDGS
-        hits = list(DDGS().text(query, max_results=6))
-    except Exception as e:
-        return f'search failed: {e}'
+    hits, err = [], ''
+    short = ' '.join(re.sub(r'[^\w\s.-]', ' ', FILLER.sub(' ', query)).split()[:10])
+    for q in dict.fromkeys([query, short, ' '.join(short.split()[:5])]):
+        if not q:
+            continue
+        try:
+            from ddgs import DDGS
+            hits = list(DDGS().text(q, max_results=6))
+        except Exception as e:
+            err = str(e)
+        if hits:
+            break
+    print(f'search {query[:60]!r}: {len(hits)} results {err[:80]}', flush=True)
     if not hits:
-        return 'no results'
+        return 'no results found; try web_search again with a shorter query'
     return '\n\n'.join(f"{i + 1}. {h.get('title', '')}\n{h.get('href', '')}\n{h.get('body', '')}" for i, h in enumerate(hits))
 
 
@@ -196,7 +207,7 @@ async def chat(req: Request):
         conv = list(body['messages'])
         if force:
             # Time-sensitive question: search first ourselves, so even a small brain answers from fresh results.
-            q = last_user_text(msgs)[:200]
+            q = ' '.join(re.sub(r'[^\w\s.-]', ' ', FILLER.sub(' ', last_user_text(msgs))).split()[:12])
             yield ('status', 'Searching the web: ' + q[:80])
             found = await run_tool('web_search', {'query': q})
             call = {'id': 'qi-search-0', 'type': 'function', 'function': {'name': 'web_search', 'arguments': json.dumps({'query': q})}}
