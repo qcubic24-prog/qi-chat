@@ -96,7 +96,6 @@ const BOARD = 'https://ntfy.sh/qcubic-qi-models-f207696921/json?poll=1&since=13h
 const MODELS = [
   { slug: 'qi-ultra',  name: 'Qi Ultra',     where: 'Kaggle' },
   { slug: 'qi-pro',    name: 'Qi Pro',       where: 'Google Colab' },
-  { slug: 'qi-oracle', name: 'Qi Always On', where: 'Oracle Cloud' },
 ];
 let models = MODELS.map(m => ({ ...m, url: '', key: '', online: false, stats: null }));
 let manual = store.get('qi.servers', []);          // servers added by hand or from an old link
@@ -137,6 +136,7 @@ async function check(s) {
   try {
     const h = await fetch(s.url + '/health', { signal: timeout(8000) });
     if (!h.ok) return { online: false, stats: null };
+    try { if ((await h.json()).ok === false) return { online: false, stats: null }; } catch {}
     let stats = null;
     try { const r = await fetch(s.url + '/qi/stats', { headers: { Authorization: 'Bearer ' + s.key }, signal: timeout(8000) }); if (r.ok) stats = await r.json(); } catch {}
     return { online: true, stats };
