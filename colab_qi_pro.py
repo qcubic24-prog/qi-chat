@@ -73,13 +73,15 @@ announce(url)
 link = PAGE + '#' + urllib.parse.urlencode({'s': url, 'k': KEY, 'n': 'Qi Pro'})
 print('\n' + '=' * 70 + '\nQi Pro is ready on the one-link website: ' + PAGE +
       '\n\nDirect link (only if the website does not list it yet):\n' + link + '\n' + '=' * 70, flush=True)
-seen = 0
+seen, last = 0, time.time()
 while True:
     time.sleep(20)
     if tun.poll() is not None:           # the tunnel dropped: open a new one and update the website
         log('reconnecting the internet link')
         tun, url = tunnel()
-        announce(url)
+        announce(url); last = time.time()
+    elif time.time() - last > 7200:      # remind the website every 2 hours that this Qi is still on
+        announce(url); last = time.time()
     try:
         lines = open(f'{W}/qi.log').read().splitlines()
         for l in lines[seen:]:

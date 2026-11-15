@@ -64,19 +64,11 @@
   <button id="send">Send</button>
 </form>
 
-<dialog id="teamDlg">
-  <h3 style="margin:0">Welcome to Qi Chat</h3>
-  <p>Type the team password from your admin. You only need to do this once on this device.</p>
-  <label for="teamPw">Team password</label><input id="teamPw" type="password" autocomplete="current-password">
-  <p id="teamErr" style="color:#b3261e"></p>
-  <div class="row"><button class="btn" id="teamSkip">Not now</button><button class="btn" id="teamOk">Continue</button></div>
-</dialog>
 
 <dialog id="menuDlg">
   <h3 style="margin:0">Settings</h3>
   <div class="row" style="flex-direction:column;align-items:flex-start">
     <button class="btn" id="mRefresh">Check models again</button>
-    <button class="btn" id="mTeam">Change team password</button>
     <button class="btn" id="mAdd">Add a Qi server by hand</button>
     <button class="btn" id="mClose">Close</button>
   </div>
@@ -99,7 +91,8 @@ const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
 };
-// The Qi models of Q-CUBIC. Each server puts its current address in servers/<slug>.json, locked with the team password.
+// The Qi models of Q-CUBIC. Each running server posts its current address to an open notice board; the newest note wins.
+const BOARD = 'https://ntfy.sh/qcubic-qi-models-f207696921/json?poll=1&since=13h';
 const MODELS = [
   { slug: 'qi-ultra',  name: 'Qi Ultra',     where: 'Kaggle' },
   { slug: 'qi-pro',    name: 'Qi Pro',       where: 'Google Colab' },
@@ -138,14 +131,6 @@ function current() {
   return l.find(x => x.online) || want || l[0];
 }
 
-const b64 = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
-async function unlock(doc, password) {
-  const c = crypto.subtle;
-  const base = await c.importKey('raw', new TextEncoder().encode(password), 'PBKDF2', false, ['deriveKey']);
-  const key = await c.deriveKey({ name: 'PBKDF2', salt: b64(doc.salt), iterations: 200000, hash: 'SHA-256' },
-                                base, { name: 'AES-GCM', length: 256 }, false, ['decrypt']);
-  return JSON.parse(new TextDecoder().decode(await c.decrypt({ name: 'AES-GCM', iv: b64(doc.iv) }, key, b64(doc.data))));
-}
 function timeout(ms) { const a = new AbortController(); setTimeout(() => a.abort(), ms); return a.signal; }
 async function check(s) {
   if (!s.url) return { online: false, stats: null };
@@ -158,24 +143,21 @@ async function check(s) {
   } catch { return { online: false, stats: null }; }
 }
 
-async function loadModels(askIfNeeded) {
-  const pw = store.get('qi.team', '');
-  let wrong = false, found = 0;
-  await Promise.all(models.map(async m => {
-    try {
-      const r = await fetch('servers/' + m.slug + '.json?t=' + Date.now(), { cache: 'no-store' });
-      if (!r.ok) return;
-      found++;
-      const doc = await r.json();
-      m.updated = doc.updated;
-      if (!pw) return;
-      try { const info = await unlock(doc, pw); m.url = info.url; m.key = info.key; m.about = info.about; }
-      catch { wrong = true; }
-    } catch {}
-  }));
+async function loadModels() {
+  try {
+    const r = await fetch(BOARD + '&t=' + Date.now(), { cache: 'no-store' });
+    const notes = {};
+    for (const line of (await r.text()).split('\n')) {
+      try {
+        const e = JSON.parse(line); if (e.event !== 'message') continue;
+        const n = JSON.parse(e.message);
+        if (n.slug && n.url && (!notes[n.slug] || e.time >= notes[n.slug].t)) notes[n.slug] = { ...n, t: e.time };
+      } catch {}
+    }
+    for (const m of models) { const n = notes[m.slug]; if (n) { m.url = n.url; m.key = n.key; m.about = n.about; } }
+  } catch {}
   await Promise.all([...models, ...manual].map(async s => Object.assign(s, await check(s))));
   fillServers(); showBar();
-  if (askIfNeeded && found && (!pw || wrong)) askTeam(wrong ? 'That team password did not open the Qi list. Please try again.' : '');
 }
 
 function fillServers() {
@@ -275,7 +257,7 @@ async function send(text) {
       ? s.name + ' is not reachable right now; it may have been switched off. Pick another Qi model at the top.'
       : e.message;
     chat.messages.pop();
-    loadModels(false);
+    loadModels();
   }
   store.set('qi.chat', chat);
   busy = false; $('#send').disabled = false;
@@ -296,13 +278,9 @@ $('#server').onchange = e => {
   if (chat.messages.length) { chat.messages.push({ role: 'switch', content: currentName }); store.set('qi.chat', chat); switchNote(currentName); $('#log').scrollTop = 1e9; }
 };
 
-function askTeam(err) { $('#teamErr').textContent = err || ''; $('#teamPw').value = ''; $('#teamDlg').showModal(); }
-$('#teamOk').onclick = e => { e.preventDefault(); store.set('qi.team', $('#teamPw').value); $('#teamDlg').close(); $('#bar').textContent = 'Opening the Qi list…'; loadModels(true); };
-$('#teamSkip').onclick = e => { e.preventDefault(); $('#teamDlg').close(); };
 $('#menuBtn').onclick = () => $('#menuDlg').showModal();
 $('#mClose').onclick = () => $('#menuDlg').close();
-$('#mRefresh').onclick = () => { $('#menuDlg').close(); $('#bar').textContent = 'Checking Qi models…'; loadModels(true); };
-$('#mTeam').onclick = () => { $('#menuDlg').close(); askTeam(''); };
+$('#mRefresh').onclick = () => { $('#menuDlg').close(); $('#bar').textContent = 'Checking Qi models…'; loadModels(); };
 $('#mAdd').onclick = () => { $('#menuDlg').close(); openAdd(); };
 
 let editing = -1;
@@ -325,15 +303,15 @@ $('#dSave').onclick = e => {
   const i = manual.findIndex(x => x.name === s.name);
   if (i >= 0) manual[i] = s; else manual.push(s);
   currentName = s.name; store.set('qi.servers', manual); store.set('qi.currentName', currentName);
-  $('#dlg').close(); loadModels(false);
+  $('#dlg').close(); loadModels();
 };
 $('#dDel').onclick = e => {
   e.preventDefault(); if (editing < 0) return;
-  manual.splice(editing, 1); store.set('qi.servers', manual); $('#dlg').close(); loadModels(false);
+  manual.splice(editing, 1); store.set('qi.servers', manual); $('#dlg').close(); loadModels();
 };
 
-render(); fillServers(); loadModels(true);
-setInterval(() => { if (!busy && document.visibilityState === 'visible') loadModels(false); }, 30000);
+render(); fillServers(); loadModels();
+setInterval(() => { if (!busy && document.visibilityState === 'visible') loadModels(); }, 30000);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>
 </body>
