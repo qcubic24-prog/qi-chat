@@ -1,0 +1,38 @@
+name: Start Qi Ultra
+# Pressed by the admin (button on the Qi website). Starts one 12-hour background run of Qi Ultra on Kaggle
+# (two T4 GPUs). It never starts by itself, and does nothing if Qi Ultra is already running.
+on: workflow_dispatch
+
+jobs:
+  start:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Start Qi Ultra on Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+          ULTRA_ID: ${{ secrets.QI_ULTRA_ID }}
+        run: |
+          pip install -q kaggle
+          KERNEL="$KAGGLE_USERNAME/qi-ultra-server"
+          STATUS=$(kaggle kernels status "$KERNEL" 2>&1 || true)
+          echo "$STATUS"
+          if echo "$STATUS" | grep -qiE 'status "?(running|queued)'; then
+            echo "Qi Ultra is already running. Nothing to do."
+            exit 0
+          fi
+          mkdir -p qi && cd qi
+          cat > run.py <<EOF
+          # Qi Ultra server run, started from the Qi website admin button. Stops by itself after 12 hours.
+          ULTRA_ID = '$ULTRA_ID'
+          import urllib.request
+          exec(urllib.request.urlopen('https://qcubic24-prog.github.io/qi-chat/kaggle_qi_ultra.py').read())
+          EOF
+          sed -i 's/^          //' run.py
+          cat > kernel-metadata.json <<EOF
+          {"id": "$KERNEL", "title": "Qi Ultra Server", "code_file": "run.py", "language": "python",
+           "kernel_type": "script", "is_private": true, "enable_gpu": true, "enable_internet": true,
+           "machine_shape": "NvidiaTeslaT4", "dataset_sources": [], "competition_sources": [], "kernel_sources": []}
+          EOF
+          kaggle kernels push -p .
+          echo "Qi Ultra is starting. It appears on https://qcubic24-prog.github.io/qi-chat/ in about 5 minutes."
