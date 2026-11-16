@@ -318,9 +318,8 @@ const mascot = (cls = '') => `<div class="mascot ${cls}"><img src="${MASCOT}" al
 // ---------- settings ----------
 const BOARD = 'https://ntfy.sh/qcubic-qi-models-f207696921/json?poll=1&since=13h';
 const MODELS = [
-  { slug: 'qi-ultra', name: 'Qi Ultra', where: 'Kaggle, two T4 GPUs', about: 'The big, smartest Qi brain. Best for hard questions and research.', canStart: true },
-  { slug: 'qi-pro',   name: 'Qi Pro',   where: 'Google Colab, one T4 GPU', about: 'The fast Qi brain. Great for everyday questions.',
-    startPage: 'https://colab.research.google.com/drive/1PQ7IENmbXdC5aA3C2uRSU4XsomglTc4I' },
+  { slug: 'qi-ultra', name: 'Qi Ultra', where: 'Kaggle, two T4 GPUs', about: 'The big, smartest Qi brain. Best for hard questions and research.', wait: '8–12 minutes' },
+  { slug: 'qi-pro',   name: 'Qi Pro',   where: 'Kaggle, T4 GPU', about: 'The fast Qi brain. Great for everyday questions.', wait: '4–6 minutes' },
 ];
 const IDEAS = [
   ['Research', 'What are the top AI news stories today?'], ['Engineering', 'Help me choose a motor for a 20 kg robot that climbs a 15° slope.'],
@@ -328,7 +327,7 @@ const IDEAS = [
   ['Learn', 'Explain stress and strain like I am a first-year engineering student.'], ['Writing', 'Write a short Instagram caption for a robot video, in lowercase.'],
 ];
 
-let models = MODELS.map(m => ({ ...m, url: '', online: false, stats: null }));
+let models = MODELS.map(m => ({ ...m, url: '', online: false, stats: null, starting: false, kstate: '' }));
 let AUTH_URL = '';
 let auth = store.get('qi.auth', null);
 let currentName = store.get('qi.currentName', '');
@@ -468,12 +467,13 @@ async function loadModels() {
       try { const e = JSON.parse(line); if (e.event !== 'message') continue; const n = JSON.parse(e.message);
             if (n.slug && (!notes[n.slug] || e.time >= notes[n.slug].t)) notes[n.slug] = { ...n, t: e.time }; } catch {}
     }
-    for (const m of models) { const n = notes[m.slug]; if (n) m.url = n.url || ''; }
+    for (const m of models) { const n = notes[m.slug]; if (n) { m.url = n.url || ''; m.starting = !!n.starting && Date.now() / 1000 - n.t < 1800; } }
   } catch {}
   await Promise.all(models.map(async m => Object.assign(m, await check(m))));
   drawChips(); showBar();
   if (view === 'models') drawModelCards();
   if (view === 'admin') drawAdminModels();
+  if (view === 'admin' && Math.random() < 0.5) refreshKaggle();
 }
 function current() {
   const want = models.find(x => x.name === currentName);
@@ -492,6 +492,7 @@ function pick(name) {
 }
 function showBar() {
   const c = current(), bar = $('#bar');
+  if (!c.online && c.starting) { bar.innerHTML = `<span class="dot" style="background:var(--brand)"></span><b>${esc(c.name)}</b> is starting, ready in about ${esc(c.wait)}`; return; }
   if (!c.online) {
     const on = models.filter(x => x.online).map(x => x.name);
     bar.innerHTML = `<span class="dot"></span><b>${esc(c.name)}</b> is switched off right now` + (on.length ? ` · online: ${esc(on.join(', '))}` : ' · no Qi model is on right now');
@@ -647,7 +648,7 @@ function show(v) {
     $$('#exploreIdeas .idea').forEach(b => b.onclick = () => { newChat(); ask(b.dataset.q); });
   if (v === 'models') drawModelCards();
   if (v === 'library') drawLibrary();
-  if (v === 'admin') { drawAdminModels(); loadPeople(); }
+  if (v === 'admin') { drawAdminModels(); loadPeople(); refreshKaggle(); }
   closeSide();
 }
 $$('#nav button').forEach(b => b.onclick = () => show(b.dataset.view));
@@ -691,35 +692,67 @@ $('#themeBtn').onclick = () => {
 
 // ---------- admin ----------
 function amsg(t, err) { $('#aMsg').textContent = t || ''; $('#aMsg').className = 'note' + (err ? ' err' : ''); }
-let armed = '';
+let kaggleReady = true;
+function adminState(m) {
+  if (m.online) return 'on';
+  if (m.starting || m.kstate === 'running' || m.kstate === 'queued' || Date.now() - (m.pressed || 0) < 15 * 60000) return 'starting';
+  return 'off';
+}
 function drawAdminModels() {
-  $('#aModels').innerHTML = models.map((m, i) => `<div class="card"><div class="t"><span style="width:10px;height:10px;border-radius:50%;background:${m.online ? 'var(--ok)' : '#b9b9bf'}"></span>${esc(m.name)}
-    <span class="pill">${m.online ? 'on' : 'off'}</span></div><div class="s">${esc(m.where)}${m.stats ? ' · ' + m.stats.busy + ' of ' + m.stats.slots + ' answering · ' + m.stats.chats_today + ' chats today' : ''}</div>
-    <div class="row">${m.online ? `<button class="btn warn" data-stop="${i}">Stop</button>` : `<button class="btn pri" data-start="${i}">Start</button>`}</div></div>`).join('');
+  const keyBox = kaggleReady ? '' : `<div class="card"><div class="t">Connect Kaggle (one time)</div>
+    <div class="s">On kaggle.com (account qcubic) open Settings → API → Create New Token, then paste the token here. It is saved privately in the login service and never shown again.</div>
+    <div class="row"><input id="kKey" type="password" autocomplete="off" placeholder="Kaggle API token" style="flex:1;min-width:200px"><button class="btn pri" id="kSave">Save</button></div></div>`;
+  $('#aModels').innerHTML = keyBox + models.map((m, i) => {
+    const st = adminState(m);
+    const dot = st === 'on' ? 'var(--ok)' : st === 'starting' ? 'var(--brand)' : '#b9b9bf';
+    const info = st === 'on' ? (m.stats ? m.stats.busy + ' of ' + m.stats.slots + ' answering · ' + m.stats.chats_today + ' chats today' : 'online')
+               : st === 'starting' ? 'starting on Kaggle, ready in about ' + m.wait : 'switched off';
+    return `<div class="card"><div class="t"><span style="width:10px;height:10px;border-radius:50%;background:${dot}"></span>${esc(m.name)}
+      <span class="pill">${st}</span></div><div class="s">${esc(m.where)} · ${esc(info)}</div>
+      <div class="row">${st === 'on' ? `<button class="btn warn" data-stop="${i}">Stop</button>`
+        : st === 'starting' ? `<button class="btn" disabled>Starting…</button>` : `<button class="btn pri" data-start="${i}">Start</button>`}</div></div>`;
+  }).join('');
   $$('#aModels [data-stop]').forEach(b => b.onclick = () => stopModel(models[+b.dataset.stop], b));
-  $$('#aModels [data-start]').forEach(b => b.onclick = () => startModel(models[+b.dataset.start]));
+  $$('#aModels [data-start]').forEach(b => b.onclick = () => startModel(models[+b.dataset.start], b));
+  if ($('#kSave')) $('#kSave').onclick = async () => {
+    const key = $('#kKey').value.trim(); $('#kKey').value = '';
+    if (!key) return amsg('Paste the Kaggle token first.', true);
+    amsg('Checking the token with Kaggle…');
+    const r = await api('setKaggleKey', { key });
+    if (r.ok) { kaggleReady = true; amsg('Kaggle is connected. Start and Stop now work with one tap.'); drawAdminModels(); refreshKaggle(); }
+    else amsg(r.error || 'Could not save it.', true);
+  };
+}
+async function refreshKaggle() {
+  const r = await api('modelStatus');
+  if (!r.ok || !r.models) return;
+  for (const m of models) m.kstate = r.models[m.slug] || '';
+  kaggleReady = !Object.values(r.models).includes('unknown');
+  if (view === 'admin') drawAdminModels();
 }
 async function stopModel(m, b) {
-  if (armed !== m.slug) { armed = m.slug; b.textContent = 'Tap again to stop'; setTimeout(() => { armed = ''; drawAdminModels(); }, 8000); return; }
-  armed = ''; amsg('Switching off ' + m.name + '…');
-  try { const r = await fetch(m.url + '/qi/admin/stop', { method: 'POST', headers: { Authorization: 'Bearer ' + auth.token } }); const d = await r.json();
-        amsg(d.ok ? m.name + ' is switching off. It shows as off within a minute.' : (d.error || 'Could not stop it.'), !d.ok);
-  } catch { amsg('Could not reach ' + m.name + '.', true); }
-  setTimeout(loadModels, 30000);
+  b.disabled = true; b.textContent = 'Stopping…'; amsg('');
+  try {
+    const r = await fetch(m.url + '/qi/admin/stop', { method: 'POST', headers: { Authorization: 'Bearer ' + auth.token }, signal: timeout(15000) });
+    if (r.status === 401) { amsg('Please log in again as admin.', true); return; }
+  } catch (e) { /* not reachable: it is already off */ }
+  m.online = false; m.url = ''; m.starting = false; m.kstate = ''; m.pressed = 0;
+  amsg(m.name + ' is switched off.'); drawAdminModels(); drawChips(); showBar();
+  setTimeout(loadModels, 20000);
 }
-async function startModel(m) {
-  if (m.startPage) { window.open(m.startPage, '_blank', 'noopener'); return amsg(m.name + ' starts from its Colab notebook: press Run there and keep that tab open. It shows here in about 3 minutes.'); }
-  amsg('Starting ' + m.name + '…');
-  const r = await api('startUltra');
-  if (r.ok) return amsg(m.name + ' is starting on Kaggle. It shows as on in about 5–10 minutes and runs up to 12 hours.');
-  if (r.page) { window.open(r.page, '_blank', 'noopener'); return amsg('On the GitHub page, press Run workflow, then the green Run workflow.'); }
-  amsg(r.error || 'Could not start it.', true);
+async function startModel(m, b) {
+  b.disabled = true; b.textContent = 'Starting…'; amsg('');
+  const r = await api('startModel', { slug: m.slug });
+  if (r.ok) { m.pressed = Date.now(); amsg(m.name + ' is starting on Kaggle. It turns green by itself in about ' + m.wait + '.'); drawAdminModels(); return; }
+  if (r.error === 'no_kaggle_key') { kaggleReady = false; drawAdminModels(); return amsg('Connect Kaggle once (box above), then press Start.', true); }
+  amsg(r.error || 'Could not start it.', true); drawAdminModels();
 }
 let people = [];
 async function loadPeople() {
   const r = await checkPending();
   if (!r.ok) { $('#aPeople').innerHTML = '<p>' + esc(r.error || 'Could not load people.') + '</p>'; return; }
   const order = { pending: 0, approved: 1, blocked: 2 };
+  if (r.kaggle === false) { kaggleReady = false; drawAdminModels(); }
   people = r.users.sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
   drawPeople();
 }
