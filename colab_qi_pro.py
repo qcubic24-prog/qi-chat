@@ -10,6 +10,7 @@ W = '/content/qi'; os.makedirs(W, exist_ok=True)
 def sh(c): return subprocess.run(c, shell=True)
 def log(*a): print(time.strftime('%H:%M:%S'), *a, flush=True)
 sh('pkill -f llama-serve[r]; pkill -f cloudflare[d]; pkill -f qi_serve[r]:app; sleep 2')
+if os.path.exists('/tmp/qi-stop'): os.remove('/tmp/qi-stop')
 
 gpu = subprocess.run('nvidia-smi -L', shell=True, capture_output=True, text=True).returncode == 0
 log('installing tools', '(GPU found)' if gpu else '(no GPU: running on CPU, answers will be slower)')
@@ -73,9 +74,24 @@ announce(url)
 link = PAGE + '#' + urllib.parse.urlencode({'s': url, 'k': KEY, 'n': 'Qi Pro'})
 print('\n' + '=' * 70 + '\nQi Pro is ready on the one-link website: ' + PAGE +
       '\n\nDirect link (only if the website does not list it yet):\n' + link + '\n' + '=' * 70, flush=True)
+def switch_off():
+    """An admin pressed Stop on the website: tell the website, stop everything, and end this run."""
+    log('Qi Pro was switched off from the website')
+    qi_register.publish('qi-pro', {'name': 'Qi Pro', 'url': '', 'stopped': True})
+    sh('pkill -f llama-serve[r]; pkill -f cloudflare[d]; pkill -f qi_serve[r]:app')
+    try:
+        from google.colab import runtime
+        runtime.unassign()            # give the GPU back to Google so it stops counting
+    except Exception:
+        pass
+    raise SystemExit(0)
+
+
 seen, last = 0, time.time()
 while True:
     time.sleep(20)
+    if os.path.exists('/tmp/qi-stop'):
+        switch_off()
     if tun.poll() is not None:           # the tunnel dropped: open a new one and update the website
         log('reconnecting the internet link')
         tun, url = tunnel()

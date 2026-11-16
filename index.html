@@ -47,6 +47,16 @@
   .dot.on { background:#1f9d55; }
   .switch { text-align:center; color:var(--mute); font-size:12px; margin:6px auto 14px; }
   dialog p { color:var(--mute); font-size:14px; margin:6px 0 0; }
+  .card { border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin:8px 0; }
+  .card .t { font-weight:600; }
+  .card .s { font-size:13px; color:var(--mute); }
+  .pill { font-size:12px; border-radius:20px; padding:2px 8px; background:#eee; margin-left:6px; }
+  .pill.approved { background:#e3f6ea; color:#1f7a45; } .pill.pending { background:#fff4d6; color:#8a6100; } .pill.blocked { background:#fde7e7; color:#a12626; }
+  .acts { margin-top:6px; display:flex; gap:4px; flex-wrap:wrap; }
+  .acts .btn { font-size:13px; border:1px solid var(--line); }
+  #adminDlg { width:min(560px, 96vw); max-height:88vh; }
+  .msgline { font-size:14px; margin-top:10px; min-height:20px; }
+  .msgline.err { color:#b3261e; }
 </style>
 </head>
 <body>
@@ -55,7 +65,7 @@
   <h1>Qi Chat</h1>
   <select id="server" aria-label="Choose a Qi model"></select>
   <button class="btn" id="newChat" title="New chat">New</button>
-  <button class="btn" id="menuBtn" title="Settings">⋯</button>
+  <button class="btn" id="menuBtn" title="Menu">⋯</button>
 </header>
 <div id="bar">Looking for Qi models…</div>
 <div id="log"></div>
@@ -64,78 +74,125 @@
   <button id="send">Send</button>
 </form>
 
+<dialog id="loginDlg">
+  <h3 style="margin:0">Welcome to Qi Chat</h3>
+  <div id="stepEmail">
+    <p>Log in with your email. We'll send you a 6-digit code.</p>
+    <label for="lEmail">Email</label><input id="lEmail" type="email" autocomplete="email" inputmode="email">
+    <div class="row"><span></span><button class="btn" id="lNext">Continue</button></div>
+  </div>
+  <div id="stepSignup" hidden>
+    <p>New here? Tell us who you are. The admin approves new people, and you'll get an email when you're in.</p>
+    <label for="sName">Name</label><input id="sName" autocomplete="name">
+    <label for="sMobile">Mobile number</label><input id="sMobile" type="tel" autocomplete="tel" inputmode="tel" placeholder="98xxxxxxxx">
+    <label for="sEmail">Email</label><input id="sEmail" type="email" autocomplete="email">
+    <div class="row"><button class="btn" id="sBack">Back</button><button class="btn" id="sSend">Ask for access</button></div>
+  </div>
+  <div id="stepCode" hidden>
+    <p id="codeNote">We sent a code to your email.</p>
+    <label for="lCode">Code</label><input id="lCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+    <div class="row"><button class="btn" id="cBack">Use another email</button><button class="btn" id="cOk">Log in</button></div>
+  </div>
+  <div id="lMsg" class="msgline"></div>
+</dialog>
 
 <dialog id="menuDlg">
-  <h3 style="margin:0">Settings</h3>
+  <h3 style="margin:0">Qi Chat</h3>
+  <p id="whoami"></p>
   <div class="row" style="flex-direction:column;align-items:flex-start">
-    <button class="btn" id="mUltra" style="display:none">Start Qi Ultra on Kaggle (admin)</button>
+    <button class="btn" id="mAdmin" style="display:none">Admin: people and models</button>
     <button class="btn" id="mRefresh">Check models again</button>
-    <button class="btn" id="mAdd">Add a Qi server by hand</button>
+    <button class="btn" id="mOut">Log out</button>
     <button class="btn" id="mClose">Close</button>
   </div>
 </dialog>
 
-<dialog id="dlg">
-  <h3 style="margin:0">Add a Qi server</h3>
-  <label for="dName">Name</label><input id="dName" placeholder="Qi Test">
-  <label for="dUrl">Server address (or paste the whole Qi link here)</label><input id="dUrl" placeholder="https://….trycloudflare.com">
-  <label for="dKey">Key</label><input id="dKey" placeholder="qi-…">
-  <div class="row">
-    <button class="btn" id="dDel" style="color:#b3261e">Remove this one</button>
-    <span><button class="btn" id="dCancel">Cancel</button> <button class="btn" id="dSave">Save</button></span>
-  </div>
+<dialog id="adminDlg">
+  <div class="row" style="margin:0"><h3 style="margin:0">Admin</h3><button class="btn" id="aClose">Close</button></div>
+  <h4 style="margin:14px 0 4px">Models</h4>
+  <div id="aModels"></div>
+  <h4 style="margin:14px 0 4px">People</h4>
+  <div id="aPeople"><p>Loading…</p></div>
+  <div id="aMsg" class="msgline"></div>
 </dialog>
 
 <script>
 const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
-  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  del(k) { try { localStorage.removeItem(k); } catch {} }
 };
-// The Qi models of Q-CUBIC. Each running server posts its current address to an open notice board; the newest note wins.
+// Each running Qi server posts its current address to an open notice board; the newest note per model wins.
 const BOARD = 'https://ntfy.sh/qcubic-qi-models-f207696921/json?poll=1&since=13h';
 const MODELS = [
-  { slug: 'qi-ultra',  name: 'Qi Ultra',     where: 'Kaggle' },
-  { slug: 'qi-pro',    name: 'Qi Pro',       where: 'Google Colab' },
+  { slug: 'qi-ultra', name: 'Qi Ultra', where: 'Kaggle', canStart: true },
+  { slug: 'qi-pro',   name: 'Qi Pro',   where: 'Google Colab', startPage: 'https://colab.research.google.com/drive/1PQ7IENmbXdC5aA3C2uRSU4XsomglTc4I' },
 ];
-let models = MODELS.map(m => ({ ...m, url: '', key: '', online: false, stats: null }));
-let manual = store.get('qi.servers', []);          // servers added by hand or from an old link
+let models = MODELS.map(m => ({ ...m, url: '', online: false, stats: null }));
+let AUTH_URL = '';
+let auth = store.get('qi.auth', null);          // { token, name, email, role }
 let currentName = store.get('qi.currentName', '');
 let chat = store.get('qi.chat', { id: crypto.randomUUID(), messages: [] });
-let busy = false;
+let busy = false, picked = false;
 
-// Admin: open the site once as …/qi-chat/#admin on your own device to show the admin button there.
-if (location.hash === '#admin') { store.set('qi.admin', true); history.replaceState(null, '', location.pathname); }
-const ADMIN = store.get('qi.admin', false);
-const START_ULTRA = 'https://github.com/qcubic24-prog/qi-chat/actions/workflows/start-qi-ultra.yml';
-
-(function fromLink() {
-  const h = new URLSearchParams(location.hash.slice(1));
-  if (!h.get('s')) return;
-  const s = { name: h.get('n') || 'Qi', url: h.get('s').replace(/\/+$/, ''), key: h.get('k') || '' };
-  const i = manual.findIndex(x => x.name === s.name);
-  if (i >= 0) manual[i] = s; else manual.push(s);
-  currentName = s.name; store.set('qi.servers', manual); store.set('qi.currentName', currentName);
-  history.replaceState(null, '', location.pathname);
-})();
-
-function all() {
-  // A registered model wins over an old hand-added entry with the same name while it is online.
-  const list = models.map(m => ({ ...m, auto: true }));
-  for (const s of manual) {
-    const i = list.findIndex(x => x.name === s.name);
-    if (i >= 0 && !list[i].online) list[i] = { ...list[i], url: s.url, key: s.key, online: !!s.online, stats: s.stats };
-    else if (i < 0) list.push({ ...s, where: 'added by hand' });
+async function api(action, data = {}) {
+  if (!AUTH_URL) {
+    try { AUTH_URL = (await (await fetch('config.json', { cache: 'no-store' })).json()).auth_url || ''; } catch {}
   }
-  return list;
-}
-let picked = false;   // true once the person chooses a model in this visit
-function current() {
-  const l = all(), want = l.find(x => x.name === currentName);
-  if (want && (want.online || picked)) return want;
-  return l.find(x => x.online) || want || l[0];
+  if (!AUTH_URL) return { ok: false, error: 'Login is not set up yet.' };
+  try {
+    const r = await fetch(AUTH_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify({ action, token: auth && auth.token, ...data }) });
+    return await r.json();
+  } catch { return { ok: false, error: 'Could not reach the login service. Check your internet and try again.' }; }
 }
 
+// ---------- login ----------
+function step(id) { for (const s of ['stepEmail', 'stepSignup', 'stepCode']) $('#' + s).hidden = s !== id; }
+function lmsg(t, err) { $('#lMsg').textContent = t || ''; $('#lMsg').className = 'msgline' + (err ? ' err' : ''); }
+function showLogin(note) { step('stepEmail'); lmsg(note || ''); if (!$('#loginDlg').open) $('#loginDlg').showModal(); }
+$('#loginDlg').addEventListener('cancel', e => e.preventDefault());       // cannot be closed without logging in
+let loginEmail = '';
+$('#lNext').onclick = async () => {
+  loginEmail = $('#lEmail').value.trim().toLowerCase();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(loginEmail)) return lmsg('Please enter a valid email.', true);
+  lmsg('Sending your code…');
+  const r = await api('sendCode', { email: loginEmail });
+  if (r.ok) { step('stepCode'); $('#codeNote').textContent = 'We sent a 6-digit code to ' + loginEmail + '. Check Inbox and Spam.'; lmsg(''); $('#lCode').focus(); }
+  else if (r.error === 'not_registered') { step('stepSignup'); $('#sEmail').value = loginEmail; lmsg(''); $('#sName').focus(); }
+  else if (r.error === 'pending') lmsg('Your request is waiting for the admin to approve it. You will get an email when you are in.', true);
+  else if (r.error === 'blocked') lmsg('This email does not have access to Qi Chat.', true);
+  else lmsg(r.error || 'Something went wrong.', true);
+};
+$('#lEmail').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#lNext').click(); } });
+$('#sBack').onclick = () => { step('stepEmail'); lmsg(''); };
+$('#sSend').onclick = async () => {
+  lmsg('Sending your request…');
+  const r = await api('register', { name: $('#sName').value, mobile: $('#sMobile').value, email: $('#sEmail').value });
+  if (!r.ok) return lmsg(r.error || 'Something went wrong.', true);
+  step('stepEmail');
+  lmsg(r.status === 'approved' ? 'You already have access. Press Continue to get your code.'
+       : 'Thank you! Your request was sent to the admin. You will get an email when you are approved.');
+};
+$('#cBack').onclick = () => { step('stepEmail'); lmsg(''); };
+$('#cOk').onclick = async () => {
+  lmsg('Checking…');
+  const r = await api('verify', { email: loginEmail, code: $('#lCode').value });
+  if (!r.ok) return lmsg(r.error || 'That did not work.', true);
+  auth = { token: r.token, name: r.name, email: r.email, role: r.role }; store.set('qi.auth', auth);
+  $('#lCode').value = ''; $('#loginDlg').close(); afterLogin();
+};
+$('#lCode').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#cOk').click(); } });
+function logout(note) { auth = null; store.del('qi.auth'); showLogin(note); }
+function afterLogin() {
+  $('#whoami').textContent = auth ? 'Logged in as ' + auth.name + ' (' + auth.email + ')' : '';
+  $('#mAdmin').style.display = auth && auth.role === 'admin' ? '' : 'none';
+  loadModels();
+}
+
+// ---------- models ----------
 function timeout(ms) { const a = new AbortController(); setTimeout(() => a.abort(), ms); return a.signal; }
 async function check(s) {
   if (!s.url) return { online: false, stats: null };
@@ -144,11 +201,13 @@ async function check(s) {
     if (!h.ok) return { online: false, stats: null };
     try { if ((await h.json()).ok === false) return { online: false, stats: null }; } catch {}
     let stats = null;
-    try { const r = await fetch(s.url + '/qi/stats', { headers: { Authorization: 'Bearer ' + s.key }, signal: timeout(8000) }); if (r.ok) stats = await r.json(); } catch {}
+    try {
+      const r = await fetch(s.url + '/qi/stats', { headers: { Authorization: 'Bearer ' + (auth && auth.token) }, signal: timeout(8000) });
+      if (r.ok) stats = await r.json();
+    } catch {}
     return { online: true, stats };
   } catch { return { online: false, stats: null }; }
 }
-
 async function loadModels() {
   try {
     const r = await fetch(BOARD, { cache: 'no-store' });
@@ -157,35 +216,39 @@ async function loadModels() {
       try {
         const e = JSON.parse(line); if (e.event !== 'message') continue;
         const n = JSON.parse(e.message);
-        if (n.slug && n.url && (!notes[n.slug] || e.time >= notes[n.slug].t)) notes[n.slug] = { ...n, t: e.time };
+        if (n.slug && (!notes[n.slug] || e.time >= notes[n.slug].t)) notes[n.slug] = { ...n, t: e.time };
       } catch {}
     }
-    for (const m of models) { const n = notes[m.slug]; if (n) { m.url = n.url; m.key = n.key; m.about = n.about; } }
+    for (const m of models) { const n = notes[m.slug]; if (n) m.url = n.url || ''; }
   } catch {}
-  await Promise.all([...models, ...manual].map(async s => Object.assign(s, await check(s))));
+  await Promise.all(models.map(async m => Object.assign(m, await check(m))));
   fillServers(); showBar();
+  if ($('#adminDlg').open) drawModels();
 }
-
+function current() {
+  const want = models.find(x => x.name === currentName);
+  if (want && (want.online || picked)) return want;
+  return models.find(x => x.online) || want || models[0];
+}
 function fillServers() {
   const sel = $('#server'); sel.innerHTML = '';
-  for (const s of all()) sel.add(new Option((s.online ? '● ' : '○ ') + s.name + (s.online ? '' : ' (off)'), s.name));
+  for (const s of models) sel.add(new Option((s.online ? '● ' : '○ ') + s.name + (s.online ? '' : ' (off)'), s.name));
   const c = current(); if (c) sel.value = c.name;
 }
 function showBar() {
   const c = current(), bar = $('#bar');
-  if (!c) { bar.textContent = 'No Qi models yet.'; return; }
   if (!c.online) {
-    const on = all().filter(x => x.online).map(x => x.name);
-    bar.innerHTML = '<span class="dot"></span><b>' + c.name + '</b> is switched off right now' +
-      (on.length ? '. Online: ' + on.join(', ') + '.' : '. No Qi model is on right now; ask your admin to start one.');
+    const on = models.filter(x => x.online).map(x => x.name);
+    bar.innerHTML = '<span class="dot"></span><b>' + esc(c.name) + '</b> is switched off right now' +
+      (on.length ? '. Online: ' + esc(on.join(', ')) + '.' : '. No Qi model is on right now.');
     return;
   }
-  const st = c.stats, bits = ['<span class="dot on"></span><b>' + c.name + '</b> is online'];
-  if (c.where) bits.push('on ' + c.where);
+  const st = c.stats, bits = ['<span class="dot on"></span><b>' + esc(c.name) + '</b> is online', 'on ' + esc(c.where)];
   if (st) { bits.push(st.busy + ' of ' + st.slots + ' answering now'); bits.push(st.chats_today + ' chats today'); }
   bar.innerHTML = bits.join(' · ');
 }
 
+// ---------- chat ----------
 function md(t) {
   const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
   const blocks = t.split(/```/);
@@ -203,7 +266,6 @@ function md(t) {
   }).join('');
 }
 function setMd(el, t) { el.innerHTML = md(t); }
-
 function bubble(role, text) {
   const row = document.createElement('div'); row.className = 'msg ' + (role === 'user' ? 'user' : 'qi');
   const b = document.createElement('div'); b.className = 'bubble';
@@ -214,14 +276,12 @@ function switchNote(name) { const d = document.createElement('div'); d.className
 function render() {
   $('#log').innerHTML = '';
   if (!chat.messages.length) $('#log').innerHTML = '<p class="note">Hi! I\'m Qi by Q-CUBIC. Choose a Qi model at the top and ask me anything.</p>';
-  for (const m of chat.messages) {
-    if (m.role === 'switch') switchNote(m.content); else bubble(m.role, m.content);
-  }
+  for (const m of chat.messages) { if (m.role === 'switch') switchNote(m.content); else bubble(m.role, m.content); }
 }
-
 async function send(text) {
+  if (!auth) return showLogin();
   const s = current();
-  if (!s || !s.url) { $('#bar').innerHTML = 'No Qi model is available yet. Tap ⋯ to check again or add one.'; return; }
+  if (!s || !s.online) { $('#bar').innerHTML = 'No Qi model is on right now. Pick one with a green dot.'; return; }
   chat.messages.push({ role: 'user', content: text });
   if (chat.messages.length === 1) $('#log').innerHTML = '';
   bubble('user', text);
@@ -232,9 +292,10 @@ async function send(text) {
     const history = chat.messages.filter(m => m.role !== 'switch').slice(-20);
     const r = await fetch(s.url + '/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + s.key },
+      headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + auth.token },
       body: JSON.stringify({ messages: history, stream: true, qi_chat: chat.id, temperature: 0.7 })
     });
+    if (r.status === 401) { chat.messages.pop(); out.textContent = 'Please log in again.'; logout('Your login has ended. Please log in again.'); return; }
     if (!r.ok) {
       let msg = s.name + ' could not answer (' + r.status + ').';
       try { msg = (await r.json()).error.message || msg; } catch {}
@@ -264,11 +325,11 @@ async function send(text) {
       : e.message;
     chat.messages.pop();
     loadModels();
+  } finally {
+    store.set('qi.chat', chat);
+    busy = false; $('#send').disabled = false;
   }
-  store.set('qi.chat', chat);
-  busy = false; $('#send').disabled = false;
 }
-
 $('#form').addEventListener('submit', e => {
   e.preventDefault(); const t = $('#input').value.trim();
   if (!t || busy) return; $('#input').value = ''; autosize(); send(t);
@@ -284,47 +345,78 @@ $('#server').onchange = e => {
   if (chat.messages.length) { chat.messages.push({ role: 'switch', content: currentName }); store.set('qi.chat', chat); switchNote(currentName); $('#log').scrollTop = 1e9; }
 };
 
+// ---------- menu and admin ----------
 $('#menuBtn').onclick = () => $('#menuDlg').showModal();
 $('#mClose').onclick = () => $('#menuDlg').close();
-if (ADMIN) $('#mUltra').style.display = '';
-$('#mUltra').onclick = () => {
-  $('#menuDlg').close();
-  const u = models.find(m => m.slug === 'qi-ultra');
-  if (u && u.online) { $('#bar').innerHTML = '<span class="dot on"></span><b>Qi Ultra</b> is already running.'; return; }
-  window.open(START_ULTRA, '_blank', 'noopener');
-  $('#bar').innerHTML = 'On the GitHub page, press <b>Run workflow</b>, then the green <b>Run workflow</b>. Qi Ultra appears here in about 5 minutes.';
-};
 $('#mRefresh').onclick = () => { $('#menuDlg').close(); $('#bar').textContent = 'Checking Qi models…'; loadModels(); };
-$('#mAdd').onclick = () => { $('#menuDlg').close(); openAdd(); };
+$('#mOut').onclick = () => { $('#menuDlg').close(); logout('You are logged out.'); };
+$('#mAdmin').onclick = () => { $('#menuDlg').close(); $('#adminDlg').showModal(); drawModels(); loadPeople(); };
+$('#aClose').onclick = () => $('#adminDlg').close();
+function amsg(t, err) { $('#aMsg').textContent = t || ''; $('#aMsg').className = 'msgline' + (err ? ' err' : ''); }
 
-let editing = -1;
-function openAdd() {
-  editing = manual.findIndex(x => x.name === currentName);
-  const s = manual[editing] || { name: '', url: '', key: '' };
-  $('#dName').value = s.name; $('#dUrl').value = s.url; $('#dKey').value = s.key;
-  $('#dDel').style.visibility = editing >= 0 ? 'visible' : 'hidden';
-  $('#dlg').showModal();
+function drawModels() {
+  $('#aModels').innerHTML = models.map((m, i) => `
+    <div class="card"><div class="t"><span class="dot ${m.online ? 'on' : ''}"></span>${esc(m.name)}
+      <span class="s">· ${esc(m.where)} · ${m.online ? 'on' : 'off'}${m.stats ? ' · ' + m.stats.chats_today + ' chats today' : ''}</span></div>
+      <div class="acts">${m.online ? `<button class="btn" data-stop="${i}">Stop</button>` : `<button class="btn" data-start="${i}">Start</button>`}</div></div>`).join('');
+  $('#aModels').querySelectorAll('[data-stop]').forEach(b => b.onclick = () => stopModel(models[+b.dataset.stop]));
+  $('#aModels').querySelectorAll('[data-start]').forEach(b => b.onclick = () => startModel(models[+b.dataset.start]));
 }
-$('#dCancel').onclick = e => { e.preventDefault(); $('#dlg').close(); };
-$('#dSave').onclick = e => {
-  e.preventDefault();
-  let s = { name: $('#dName').value.trim() || 'Qi', url: $('#dUrl').value.trim().replace(/\/+$/, ''), key: $('#dKey').value.trim() };
-  if (s.url.includes('#s=')) {
-    const h = new URLSearchParams(s.url.split('#')[1]);
-    s = { name: h.get('n') || s.name, url: (h.get('s') || '').replace(/\/+$/, ''), key: h.get('k') || s.key };
+let armed = '';
+async function stopModel(m) {
+  if (armed !== m.slug) { armed = m.slug; setTimeout(() => { armed = ''; }, 8000);
+    return amsg('Press Stop again within 8 seconds to switch off ' + m.name + '. People chatting with it will be cut off.'); }
+  armed = '';
+  amsg('Switching off ' + m.name + '…');
+  try {
+    const r = await fetch(m.url + '/qi/admin/stop', { method: 'POST', headers: { Authorization: 'Bearer ' + auth.token } });
+    const d = await r.json();
+    amsg(d.ok ? m.name + ' is switching off. It shows as off within a minute.' : (d.error || 'Could not stop it.'), !d.ok);
+  } catch { amsg('Could not reach ' + m.name + '.', true); }
+  setTimeout(loadModels, 30000);
+}
+async function startModel(m) {
+  if (m.startPage) {
+    window.open(m.startPage, '_blank', 'noopener');
+    return amsg(m.name + ' starts from its Colab notebook: press Run there and keep that tab open. It shows here in about 3 minutes.');
   }
-  if (!s.url.startsWith('https://')) { $('#dUrl').setCustomValidity('The address must start with https://'); $('#dUrl').reportValidity(); setTimeout(() => $('#dUrl').setCustomValidity(''), 3000); return; }
-  const i = manual.findIndex(x => x.name === s.name);
-  if (i >= 0) manual[i] = s; else manual.push(s);
-  currentName = s.name; store.set('qi.servers', manual); store.set('qi.currentName', currentName);
-  $('#dlg').close(); loadModels();
-};
-$('#dDel').onclick = e => {
-  e.preventDefault(); if (editing < 0) return;
-  manual.splice(editing, 1); store.set('qi.servers', manual); $('#dlg').close(); loadModels();
-};
+  amsg('Starting ' + m.name + '…');
+  const r = await api('startUltra');
+  if (r.ok) return amsg(m.name + ' is starting on Kaggle. It shows as on in about 5–10 minutes and runs up to 12 hours.');
+  if (r.page) { window.open(r.page, '_blank', 'noopener'); return amsg('On the GitHub page, press Run workflow, then the green Run workflow.'); }
+  amsg(r.error || 'Could not start it.', true);
+}
 
-render(); fillServers(); loadModels();
+async function loadPeople() {
+  const r = await api('listUsers');
+  if (!r.ok) { $('#aPeople').innerHTML = '<p>' + esc(r.error || 'Could not load people.') + '</p>'; return; }
+  const order = { pending: 0, approved: 1, blocked: 2 };
+  const list = r.users.sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
+  $('#aPeople').innerHTML = list.map((u, i) => `
+    <div class="card"><div class="t">${esc(u.name)}<span class="pill ${esc(u.status)}">${esc(u.status)}</span>${u.role === 'admin' ? '<span class="pill">admin</span>' : ''}</div>
+      <div class="s">${esc(u.mobile)} · ${esc(u.email)}${u.last_login ? ' · last login ' + esc(u.last_login.slice(0, 10)) : ''}</div>
+      <div class="acts" data-i="${i}">
+        ${u.status !== 'approved' ? '<button class="btn" data-s="approved">Approve</button>' : ''}
+        ${u.status !== 'blocked' && u.email !== auth.email ? '<button class="btn" data-s="blocked">Block</button>' : ''}
+        ${u.status === 'approved' && u.role !== 'admin' ? '<button class="btn" data-r="admin">Make admin</button>' : ''}
+        ${u.role === 'admin' && u.email !== auth.email ? '<button class="btn" data-r="user">Remove admin</button>' : ''}
+      </div></div>`).join('') || '<p>No one yet.</p>';
+  $('#aPeople').querySelectorAll('.acts button').forEach(b => b.onclick = async () => {
+    const u = list[+b.parentElement.dataset.i];
+    amsg('Saving…');
+    const d = await api('setStatus', { target: u.email, status: b.dataset.s || u.status, role: b.dataset.r || u.role });
+    amsg(d.ok ? 'Saved.' : (d.error || 'Could not save.'), !d.ok);
+    loadPeople();
+  });
+}
+
+// ---------- start ----------
+render(); fillServers();
+if (auth) {
+  afterLogin();
+  api('check').then(r => { if (r && r.ok === false && !r.error) logout('Your login has ended. Please log in again.');
+                           else if (r && r.ok) { auth = { ...auth, name: r.name, role: r.role }; store.set('qi.auth', auth); afterLogin(); } });
+} else { loadModels(); showLogin(); }
 setInterval(() => { if (!busy && document.visibilityState === 'visible') loadModels(); }, 30000);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
 </script>

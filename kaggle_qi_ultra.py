@@ -5,6 +5,7 @@ if not globals().get('ULTRA_ID') and not os.environ.get('ULTRA_ID'): raise Syste
 ULTRA_ID = globals().get('ULTRA_ID') or os.environ.get('ULTRA_ID', '')   # set in the first line of the Kaggle cell
 PAGE = 'https://qcubic24-prog.github.io/qi-chat/'
 W = '/tmp/qi'; os.makedirs(W, exist_ok=True)
+if os.path.exists('/tmp/qi-stop'): os.remove('/tmp/qi-stop')
 def sh(c): return subprocess.run(c, shell=True)
 def log(*a): print(time.strftime('%H:%M:%S'), *a, flush=True)
 
@@ -65,9 +66,19 @@ announce(url)
 link = PAGE + '#' + urllib.parse.urlencode({'s': url, 'k': KEY, 'n': 'Qi Ultra'})
 print('\n' + '=' * 70 + '\nQi Ultra is ready on the one-link website: ' + PAGE +
       '\n\nDirect link (only if the website does not list it yet):\n' + link + '\n' + '=' * 70, flush=True)
+def switch_off():
+    """An admin pressed Stop on the website: tell the website, stop everything, and end this run."""
+    log('Qi Ultra was switched off from the website')
+    qi_register.publish('qi-ultra', {'name': 'Qi Ultra', 'url': '', 'stopped': True})
+    sh('pkill -f llama-serve[r]; pkill -f cloudflare[d]; pkill -f qi_serve[r]:app')
+    raise SystemExit(0)
+
+
 seen, last = 0, time.time()
 while True:
     time.sleep(20)
+    if os.path.exists('/tmp/qi-stop'):
+        switch_off()
     if tun.poll() is not None:           # the tunnel dropped: open a new one and update the website
         log('reconnecting the internet link')
         tun, url = tunnel()

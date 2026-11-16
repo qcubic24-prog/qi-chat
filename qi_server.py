@@ -145,17 +145,63 @@ def status(text: str) -> str:
     return 'data: ' + json.dumps({'qi_status': text}, ensure_ascii=False) + '\n\n'
 
 
-def allowed(req: Request) -> bool:
-    return not KEY or req.headers.get('authorization', '') == f'Bearer {KEY}'
+AUTH_URL = os.environ.get('QI_AUTH_URL', '')      # the Qi Chat login service; read from the website's config.json if not set
+STOP_FILE = os.environ.get('QI_STOP_FILE', '/tmp/qi-stop')
+_seen = {}                                        # token -> (time checked, user), so the login service is asked at most every 10 min
+_cfg = {'t': 0}
 
 
-def save(chat_id: str, messages: list, answer: str):
+def _auth_url():
+    """The login service address, or None if the website's settings could not be read (then nobody is let in)."""
+    if AUTH_URL:
+        return AUTH_URL
+    if time.time() - _cfg['t'] > 300:
+        try:
+            _cfg['url'] = httpx.get('https://qcubic24-prog.github.io/qi-chat/config.json', timeout=10).json().get('auth_url', '')
+            _cfg['t'] = time.time()
+        except Exception:
+            return _cfg.get('url')
+    return _cfg.get('url')
+
+
+async def who(req: Request):
+    """The logged-in, approved person behind this request, or None. Without a login service, the server key is used."""
+    token = req.headers.get('authorization', '').removeprefix('Bearer ').strip()
+    url = await asyncio.to_thread(_auth_url)
+    if url is None:
+        return None
+    if not url:     # no login service set up: fall back to the server key
+        return {'email': 'key', 'name': 'key', 'role': 'user'} if (not KEY or token == KEY) else None
+    if not token:
+        return None
+    hit = _seen.get(token)
+    if hit and time.time() - hit[0] < 600:
+        return hit[1]
+    try:
+        r = await web.post(url, content=json.dumps({'action': 'check', 'token': token}),
+                           headers={'Content-Type': 'text/plain'}, follow_redirects=True)
+        d = r.json()
+        user = {'email': d['email'], 'name': d.get('name', ''), 'role': d.get('role', 'user')} if d.get('ok') else None
+    except Exception as e:
+        print('login check failed:', e, flush=True)
+        return hit[1] if hit else None
+    _seen[token] = (time.time(), user)
+    if len(_seen) > 5000:
+        _seen.clear()
+    return user
+
+
+def denied():
+    return JSONResponse({'error': {'message': 'Please log in to Qi Chat again.', 'code': 'login'}}, 401)
+
+
+def save(chat_id: str, messages: list, answer: str, user: str = ''):
     try:
         day = datetime.date.today().isoformat()
         d = os.path.join(STORE, day); os.makedirs(d, exist_ok=True)
         safe = re.sub(r'[^A-Za-z0-9_-]', '', chat_id)[:40] or uuid.uuid4().hex
         msgs = [m for m in messages if m.get('role') != 'system'] + [{'role': 'assistant', 'content': answer}]
-        json.dump({'chat': safe, 'model': NAME, 'time': time.time(), 'messages': msgs},
+        json.dump({'chat': safe, 'model': NAME, 'user': user, 'time': time.time(), 'messages': msgs},
                   open(os.path.join(d, safe + '.json'), 'w'), ensure_ascii=False, indent=1)
     except Exception as e:
         print('could not save chat:', e)
@@ -190,10 +236,22 @@ async def health():
     return {'ok': ok, 'name': NAME}
 
 
+@app.post('/qi/admin/stop')
+async def admin_stop(req: Request):
+    """An admin switches this Qi off from the website. The launcher sees the note and shuts everything down."""
+    user = await who(req)
+    if not user or user.get('role') != 'admin':
+        return JSONResponse({'ok': False, 'error': 'Admins only.'}, 403)
+    with open(STOP_FILE, 'w') as f:
+        f.write(user['email'])
+    print(f'stop asked by {user["email"]}', flush=True)
+    return {'ok': True, 'message': f'{NAME} is switching off.'}
+
+
 @app.get('/qi/stats')
 async def stats(req: Request):
-    if not allowed(req):
-        return JSONResponse({'error': 'wrong key'}, 401)
+    if not await who(req):
+        return denied()
     d = os.path.join(STORE, datetime.date.today().isoformat())
     today = len(os.listdir(d)) if os.path.isdir(d) else 0
     return {'name': NAME, 'about': ABOUT, 'slots': SLOTS, 'busy': STATS['busy'], 'served': STATS['served'],
@@ -202,15 +260,16 @@ async def stats(req: Request):
 
 @app.get('/v1/models')
 async def models(req: Request):
-    if not allowed(req):
-        return JSONResponse({'error': 'wrong key'}, 401)
+    if not await who(req):
+        return denied()
     return {'object': 'list', 'data': [{'id': NAME, 'object': 'model', 'owned_by': 'Q-CUBIC'}]}
 
 
 @app.post('/v1/chat/completions')
 async def chat(req: Request):
-    if not allowed(req):
-        return JSONResponse({'error': {'message': 'Wrong key. Ask the admin for the Qi link again.'}}, 401)
+    user = await who(req)
+    if not user:
+        return denied()
     body = await req.json()
     STATS['served'] += 1
     chat_id = str(body.pop('qi_chat', '') or uuid.uuid4().hex)
@@ -282,7 +341,7 @@ async def chat(req: Request):
                 err = ev
         if err:
             return JSONResponse({'error': {'message': f'Qi brain error {err[1]}'}}, 502)
-        save(chat_id, msgs, answer)
+        save(chat_id, msgs, answer, user['email'])
         return {'id': 'qi-' + uuid.uuid4().hex, 'object': 'chat.completion', 'model': NAME,
                 'choices': [{'index': 0, 'finish_reason': 'stop', 'message': {'role': 'assistant', 'content': answer}}]}
 
@@ -332,5 +391,5 @@ async def chat(req: Request):
             yield 'data: ' + json.dumps(chunk, ensure_ascii=False) + '\n\n'
             await asyncio.sleep(0.005)
         yield 'data: [DONE]\n\n'
-        save(chat_id, msgs, answer)
+        save(chat_id, msgs, answer, user['email'])
     return StreamingResponse(gen(), media_type='text/event-stream')

@@ -1,5 +1,5 @@
 // Lets Qi Chat be installed on the home screen; the page itself always loads fresh when online.
-const C = 'qi-chat-v4', FILES = ['./', 'index.html', 'manifest.json', 'icon.svg'];
+const C = 'qi-chat-v5', FILES = ['./', 'index.html', 'manifest.json', 'icon.svg'];
 self.addEventListener('install', e => e.waitUntil(caches.open(C).then(c => c.addAll(FILES)).then(() => self.skipWaiting())));
 self.addEventListener('activate', e => e.waitUntil(self.clients.claim()));
 self.addEventListener('fetch', e => {
