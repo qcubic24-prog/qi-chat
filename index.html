@@ -4,157 +4,380 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Qi Chat</title>
-<meta name="theme-color" content="#f26b1d">
+<meta name="description" content="Qi by Q-CUBIC: Cubic Intelligence">
+<meta name="theme-color" content="#ff6a00">
 <link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon.svg">
+<link rel="icon" href="img/mascot.webp">
 <link rel="apple-touch-icon" href="icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script>
+  // Pick the theme before the page paints, so it never flashes the wrong colours.
+  try { const t = localStorage.getItem('qi.theme'); if (t) document.documentElement.dataset.theme = JSON.parse(t); } catch {}
+</script>
 <style>
-  :root { --o:#f26b1d; --o2:#fff3eb; --ink:#1d1d1f; --mute:#6b6b70; --line:#ececef; --bg:#ffffff; }
-  * { box-sizing:border-box; }
-  html, body { margin:0; height:100%; background:var(--bg); color:var(--ink);
-    font:16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
-  body { display:flex; flex-direction:column; height:100dvh; }
-  header { display:flex; align-items:center; gap:10px; padding:10px 14px; border-bottom:1px solid var(--line); }
-  header .logo { width:30px; height:30px; border-radius:9px; background:var(--o); color:#fff; display:grid; place-items:center; font-weight:700; }
-  header h1 { font-size:17px; margin:0; flex:1; white-space:nowrap; }
-  header select { max-width:46vw; font:inherit; font-size:14px; padding:6px 8px; border:1px solid var(--line); border-radius:10px; background:#fff; }
-  .btn { border:0; background:none; font:inherit; color:var(--o); font-weight:600; padding:6px 8px; border-radius:8px; cursor:pointer; }
-  .btn:hover { background:var(--o2); }
-  #log { flex:1; overflow-y:auto; padding:16px 14px 8px; }
-  .msg { max-width:760px; margin:0 auto 12px; display:flex; }
-  .msg.user { justify-content:flex-end; }
-  .bubble { padding:10px 14px; border-radius:16px; white-space:pre-wrap; word-wrap:break-word; max-width:88%; }
-  .user .bubble { background:var(--o); color:#fff; border-bottom-right-radius:5px; }
-  .qi .bubble { background:var(--o2); border-bottom-left-radius:5px; }
-  .note { text-align:center; color:var(--mute); font-size:14px; margin:24px auto; max-width:520px; }
-  form { display:flex; gap:8px; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); border-top:1px solid var(--line); max-width:790px; width:100%; margin:0 auto; }
-  textarea { flex:1; resize:none; font:inherit; padding:10px 12px; border:1px solid var(--line); border-radius:14px; max-height:140px; outline:none; }
-  textarea:focus { border-color:var(--o); }
-  form button { background:var(--o); color:#fff; border:0; border-radius:14px; padding:0 18px; font:inherit; font-weight:600; cursor:pointer; }
-  form button:disabled { opacity:.5; }
-  dialog { border:0; border-radius:16px; padding:20px; width:min(440px, 92vw); }
-  dialog::backdrop { background:rgba(0,0,0,.3); }
-  dialog label { display:block; font-size:14px; color:var(--mute); margin:10px 0 4px; }
-  dialog input { width:100%; font:inherit; padding:9px 10px; border:1px solid var(--line); border-radius:10px; }
-  .row { display:flex; justify-content:space-between; gap:8px; margin-top:16px; }
-  .status { font-size:12px; color:var(--mute); }
-  .bubble pre { background:#fff; border:1px solid var(--line); border-radius:8px; padding:8px; overflow-x:auto; white-space:pre; }
-  .bubble code { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:14px; }
-  .bubble a { color:#b8470c; word-break:break-all; }
-  #bar { font-size:12px; color:var(--mute); padding:4px 14px; border-bottom:1px solid var(--line); text-align:center; min-height:24px; }
-  #bar b { color:var(--ink); font-weight:600; }
-  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:#bbb; margin-right:5px; vertical-align:middle; }
-  .dot.on { background:#1f9d55; }
-  .switch { text-align:center; color:var(--mute); font-size:12px; margin:6px auto 14px; }
-  dialog p { color:var(--mute); font-size:14px; margin:6px 0 0; }
-  .card { border:1px solid var(--line); border-radius:12px; padding:10px 12px; margin:8px 0; }
-  .card .t { font-weight:600; }
-  .card .s { font-size:13px; color:var(--mute); }
-  .pill { font-size:12px; border-radius:20px; padding:2px 8px; background:#eee; margin-left:6px; }
-  .pill.approved { background:#e3f6ea; color:#1f7a45; } .pill.pending { background:#fff4d6; color:#8a6100; } .pill.blocked { background:#fde7e7; color:#a12626; }
-  .acts { margin-top:6px; display:flex; gap:4px; flex-wrap:wrap; }
-  .acts .btn { font-size:13px; border:1px solid var(--line); }
-  #adminDlg { width:min(560px, 96vw); max-height:88vh; }
-  .msgline { font-size:14px; margin-top:10px; min-height:20px; }
-  .msgline.err { color:#b3261e; }
+  :root {
+    --brand: #ff6a00; --brand-2: #ff8a2b; --brand-soft: #fff1e6; --brand-ink: #c24e00;
+    --bg: #ffffff; --side: #fff8f3; --panel: #ffffff; --ink: #1c1c1e; --mute: #6e6e76; --line: #f0e6de;
+    --qi-bubble: #fff3ea; --chip: #f4f1ee; --shadow: 0 6px 24px rgba(255, 106, 0, .10), 0 1px 3px rgba(0,0,0,.06);
+    --ok: #1fa35c; --err: #c62828;
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0d0d0f; --side: #141416; --panel: #18181b; --ink: #f4f4f5; --mute: #a1a1aa; --line: #26262b;
+      --qi-bubble: #1f1a16; --chip: #222226; --brand-soft: #2a1b10; --brand-ink: #ff9a4d; --shadow: 0 6px 24px rgba(0,0,0,.45);
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0d0d0f; --side: #141416; --panel: #18181b; --ink: #f4f4f5; --mute: #a1a1aa; --line: #26262b;
+    --qi-bubble: #1f1a16; --chip: #222226; --brand-soft: #2a1b10; --brand-ink: #ff9a4d; --shadow: 0 6px 24px rgba(0,0,0,.45);
+    color-scheme: dark;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink);
+    font: 16px/1.5 "Nunito", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  button { font: inherit; color: inherit; }
+  [hidden] { display: none !important; }
+  .only-dark { display: none !important; }
+  :root[data-theme="dark"] .only-dark { display: block !important; } :root[data-theme="dark"] .only-light { display: none !important; }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) .only-dark { display: block !important; } :root:not([data-theme="light"]) .only-light { display: none !important; }
+  }
+  img.only-light { mix-blend-mode: multiply; } img.only-dark { mix-blend-mode: screen; }
+  svg.i { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* ---------- layout ---------- */
+  .app { display: grid; grid-template-columns: 280px 1fr; height: 100dvh; }
+  .side { background: var(--side); border-right: 1px solid var(--line); display: flex; flex-direction: column; padding: 18px 16px 14px; min-height: 0; }
+  .logo { display: block; margin: 0 auto 14px; width: 190px; }
+  .logo img { width: 100%; display: block; }
+  .newchat { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; border: 0; border-radius: 14px; padding: 13px;
+    background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; font-weight: 800; font-size: 17px; cursor: pointer;
+    box-shadow: 0 6px 18px rgba(255, 106, 0, .35); transition: transform .15s; }
+  .newchat:active { transform: scale(.97); }
+  .nav { margin: 14px 0 6px; display: grid; gap: 2px; }
+  .nav button { display: flex; align-items: center; gap: 12px; border: 0; background: none; padding: 9px 12px; border-radius: 12px; cursor: pointer; font-weight: 600; font-size: 16px; text-align: left; }
+  .nav button:hover { background: var(--chip); }
+  .nav button.on { background: var(--brand-soft); color: var(--brand); }
+  .hist { flex: 1; overflow-y: auto; margin: 6px -6px 10px; padding: 0 6px; min-height: 0; }
+  .hist h4 { font-size: 15px; margin: 12px 4px 4px; font-weight: 800; }
+  .hist button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 7px 10px; border-radius: 10px; cursor: pointer;
+    font-size: 14px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hist button:hover { background: var(--chip); }
+  .hist button.on { background: var(--brand-soft); }
+  .hist button span { overflow: hidden; text-overflow: ellipsis; }
+  .me { display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 16px; background: var(--panel); border: 1px solid var(--line); cursor: pointer; text-align: left; width: 100%; }
+  .me .av { width: 46px; height: 46px; border-radius: 50%; background: #1c1c1e; overflow: hidden; display: grid; place-items: center; flex: none; }
+  .me .av img { width: 120%; margin-top: 8px; }
+  .me b { display: block; font-size: 16px; }
+  .badge { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 700; color: var(--brand); background: var(--brand-soft); border-radius: 20px; padding: 1px 9px; }
+
+  .main { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+  .top { display: flex; align-items: center; gap: 10px; padding: 12px 18px; border-bottom: 1px solid var(--line); }
+  .burger { display: none; border: 0; background: none; padding: 6px; border-radius: 10px; cursor: pointer; }
+  .chips { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; flex: 1; }
+  .chip { display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 14px; padding: 9px 16px; background: var(--chip); font-weight: 800; font-size: 16px; cursor: pointer; white-space: nowrap; }
+  .chip.on { background: var(--brand-soft); color: var(--brand); }
+  .chip .dot { width: 9px; height: 9px; border-radius: 50%; background: #b9b9bf; }
+  .chip .dot.up { background: var(--ok); box-shadow: 0 0 0 3px rgba(31, 163, 92, .18); }
+  .iconbtn { position: relative; border: 0; background: none; width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; }
+  .iconbtn:hover { background: var(--chip); }
+  .iconbtn .pip { position: absolute; top: 7px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: var(--brand); border: 2px solid var(--bg); }
+  .round { background: var(--chip); }
+  .status { font-size: 15px; color: var(--mute); padding: 10px 22px; border-bottom: 1px solid var(--line); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status b { color: var(--ink); }
+  .status .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; background: #b9b9bf; margin-right: 8px; vertical-align: -1px; }
+  .status .dot.up { background: var(--ok); }
+
+  .view { flex: 1; overflow-y: auto; min-height: 0; }
+  #log { padding: 24px clamp(14px, 4vw, 48px) 16px; }
+  .msg { display: flex; gap: 12px; margin: 0 auto 20px; max-width: 920px; align-items: flex-start; }
+  .msg.user { justify-content: flex-end; }
+  .bubble { padding: 12px 18px; border-radius: 20px; white-space: pre-wrap; word-wrap: break-word; max-width: min(78%, 680px); font-size: 17px; }
+  .user .bubble { background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; border-top-right-radius: 6px; box-shadow: 0 4px 14px rgba(255,106,0,.25); }
+  .qi .bubble { background: var(--qi-bubble); border-top-left-radius: 6px; }
+  .bubble pre { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px; overflow-x: auto; white-space: pre; }
+  .bubble code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 14px; }
+  .bubble a { color: var(--brand-ink); word-break: break-word; }
+  .uav { width: 52px; height: 52px; border-radius: 50%; background: var(--chip); display: grid; place-items: center; flex: none; }
+  .qcol { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; max-width: min(78%, 720px); }
+  .qcol .bubble { max-width: 100%; }
+  .acts { display: flex; gap: 2px; margin: 6px 0 0 4px; padding: 4px 6px; border-radius: 14px; background: var(--panel); box-shadow: var(--shadow); }
+  .acts button { border: 0; background: none; width: 38px; height: 34px; border-radius: 10px; display: grid; place-items: center; cursor: pointer; color: var(--ink); }
+  .acts button:hover { background: var(--chip); }
+  .acts button.on { color: var(--brand); }
+  .switch { text-align: center; color: var(--mute); font-size: 13px; margin: -6px auto 18px; }
+
+  /* ---------- the toy mascot ---------- */
+  .mascot { width: 62px; height: 62px; flex: none; position: relative; }
+  .mascot img { width: 100%; height: 100%; object-fit: contain; animation: floaty 3.6s ease-in-out infinite; transform-origin: 50% 90%;
+    filter: drop-shadow(0 4px 6px rgba(255, 106, 0, .25)); }
+  .mascot.think img { animation: think .7s ease-in-out infinite; filter: drop-shadow(0 0 10px rgba(255, 150, 40, .75)); }
+  .mascot.pop img { animation: pop .5s cubic-bezier(.3,1.6,.5,1) both, floaty 3.6s ease-in-out .5s infinite; }
+  @keyframes floaty { 0%,100% { transform: translateY(0) rotate(-1.5deg); } 50% { transform: translateY(-5px) rotate(1.5deg); } }
+  @keyframes think { 0%,100% { transform: translateY(0) scale(1, 1); } 30% { transform: translateY(-7px) scale(.97, 1.04); } 60% { transform: translateY(0) scale(1.04, .96); } }
+  @keyframes pop { 0% { transform: scale(.3) translateY(20px); opacity: 0; } 100% { transform: scale(1) translateY(0); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) { .mascot img { animation: none !important; } }
+  .typing { display: inline-flex; gap: 5px; align-items: center; color: var(--mute); }
+  .typing i { width: 7px; height: 7px; border-radius: 50%; background: var(--brand); animation: blink 1.2s infinite; }
+  .typing i:nth-child(2) { animation-delay: .2s; } .typing i:nth-child(3) { animation-delay: .4s; }
+  @keyframes blink { 0%, 80%, 100% { opacity: .25; transform: translateY(0); } 40% { opacity: 1; transform: translateY(-3px); } }
+
+  .hello { text-align: center; padding: 6vh 16px 10px; }
+  .hello .mascot { width: 150px; height: 150px; margin: 0 auto 8px; }
+  .hello h2 { margin: 6px 0 4px; font-size: clamp(22px, 4vw, 30px); font-weight: 800; }
+  .hello p { color: var(--mute); margin: 0 0 18px; }
+  .ideas { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 10px; max-width: 760px; margin: 0 auto; }
+  .idea { border: 1px solid var(--line); background: var(--panel); border-radius: 16px; padding: 12px 14px; text-align: left; cursor: pointer; font-size: 15px; transition: transform .15s, box-shadow .15s; }
+  .idea:hover { transform: translateY(-2px); box-shadow: var(--shadow); }
+  .idea b { display: block; color: var(--brand); font-size: 14px; }
+
+  /* ---------- composer ---------- */
+  .composer { display: flex; align-items: flex-end; gap: 12px; padding: 12px clamp(12px, 4vw, 48px) calc(14px + env(safe-area-inset-bottom)); }
+  .box { flex: 1; min-width: 0; display: flex; align-items: flex-end; gap: 6px; border: 1px solid var(--line); background: var(--panel); border-radius: 20px; padding: 6px 8px; box-shadow: var(--shadow); max-width: 980px; margin-left: auto; }
+  .box textarea { flex: 1; min-width: 0; width: 100%; border: 0; outline: 0; resize: none; background: none; color: var(--ink); font: inherit; font-size: 17px; padding: 10px 4px; max-height: 180px; }
+  .box .iconbtn { width: 40px; height: 40px; }
+  .box .iconbtn.rec { color: #fff; background: var(--err); animation: blink 1.2s infinite; }
+  .sendbtn { width: 58px; height: 58px; border: 0; border-radius: 18px; background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; display: grid; place-items: center; cursor: pointer;
+    box-shadow: 0 6px 18px rgba(255, 106, 0, .35); flex: none; margin-right: auto; }
+  .sendbtn:disabled { opacity: .5; }
+  .attached { max-width: 980px; margin: 0 auto -4px; padding: 0 clamp(12px, 4vw, 48px); font-size: 13px; color: var(--mute); }
+
+  /* ---------- other views ---------- */
+  .page { max-width: 900px; margin: 0 auto; padding: 24px clamp(14px, 4vw, 40px) 40px; }
+  .page h2 { font-size: 26px; margin: 0 0 4px; font-weight: 800; }
+  .page > p { color: var(--mute); margin: 0 0 18px; }
+  .card { border: 1px solid var(--line); background: var(--panel); border-radius: 18px; padding: 14px 16px; margin: 10px 0; }
+  .card .t { font-weight: 800; font-size: 17px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .card .s { color: var(--mute); font-size: 14px; }
+  .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 8px 14px; font-weight: 700; cursor: pointer; }
+  .btn.pri { border: 0; background: linear-gradient(135deg, var(--brand), var(--brand-2)); color: #fff; }
+  .btn.warn { color: var(--err); }
+  .pill { font-size: 12px; font-weight: 800; border-radius: 20px; padding: 2px 9px; background: var(--chip); }
+  .pill.approved { background: #e2f6ea; color: #17733f; } .pill.pending { background: #fff3d3; color: #8a6100; } .pill.blocked { background: #fde7e7; color: #a12626; }
+  :root[data-theme="dark"] .pill.approved { background: #12301f; color: #6fd99a; } :root[data-theme="dark"] .pill.pending { background: #33290f; color: #f2c75c; } :root[data-theme="dark"] .pill.blocked { background: #3a1616; color: #ff8a8a; }
+  .search { width: 100%; border: 1px solid var(--line); background: var(--panel); color: var(--ink); border-radius: 14px; padding: 11px 14px; font: inherit; margin-bottom: 8px; }
+  .note { min-height: 22px; font-size: 14px; margin-top: 8px; }
+  .note.err { color: var(--err); }
+
+  /* ---------- login ---------- */
+  .gate { position: fixed; inset: 0; z-index: 50; background: var(--bg); display: grid; place-items: center; padding: 20px; overflow-y: auto; }
+  .gate .card { width: min(440px, 100%); padding: 22px; box-shadow: var(--shadow); }
+  .gate .logo { width: 220px; margin-bottom: 4px; }
+  .tabs { display: grid; grid-template-columns: 1fr 1fr; background: var(--chip); border-radius: 14px; padding: 4px; margin: 10px 0 6px; }
+  .tabs button { border: 0; background: none; padding: 9px; border-radius: 11px; font-weight: 800; cursor: pointer; }
+  .tabs button.on { background: var(--panel); color: var(--brand); box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+  label { display: block; font-size: 14px; color: var(--mute); margin: 12px 0 4px; font-weight: 700; }
+  input { width: 100%; font: inherit; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); color: var(--ink); }
+  input:focus, textarea:focus { outline: 2px solid rgba(255, 106, 0, .35); outline-offset: 0; }
+  .link { border: 0; background: none; color: var(--brand); font-weight: 700; cursor: pointer; padding: 6px 0; }
+  .menu { position: fixed; z-index: 40; min-width: 220px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); padding: 6px; }
+  .menu button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 10px 12px; border-radius: 10px; cursor: pointer; text-align: left; font-weight: 600; }
+  .menu button:hover { background: var(--chip); }
+  .menu .who { padding: 8px 12px; font-size: 13px; color: var(--mute); border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+  .toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); background: #1c1c1e; color: #fff; padding: 9px 16px; border-radius: 12px; font-size: 14px; z-index: 60; }
+  .scrim { display: none; }
+
+  /* ---------- phones and tablets ---------- */
+  @media (max-width: 860px) {
+    .app { grid-template-columns: 1fr; }
+    .side { position: fixed; inset: 0 auto 0 0; width: min(300px, 86vw); z-index: 30; transform: translateX(-105%); transition: transform .25s ease; box-shadow: var(--shadow); }
+    .side.open { transform: none; }
+    .scrim.open { display: block; position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 25; }
+    .burger { display: grid; }
+    .top { padding: 8px 10px; gap: 4px; }
+    .chip { padding: 8px 12px; font-size: 15px; }
+    .status { padding: 8px 14px; font-size: 13px; }
+    .bubble { font-size: 16px; max-width: 86%; }
+    .qcol { max-width: 86%; }
+    .mascot { width: 44px; height: 44px; }
+    .uav { display: none; }
+    .sendbtn { width: 50px; height: 50px; border-radius: 16px; }
+    .hide-sm { display: none; }
+  }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">Qi</div>
-  <h1>Qi Chat</h1>
-  <select id="server" aria-label="Choose a Qi model"></select>
-  <button class="btn" id="newChat" title="New chat">New</button>
-  <button class="btn" id="menuBtn" title="Menu">⋯</button>
-</header>
-<div id="bar">Looking for Qi models…</div>
-<div id="log"></div>
-<form id="form">
-  <textarea id="input" rows="1" placeholder="Message Qi…" autocomplete="off"></textarea>
-  <button id="send">Send</button>
-</form>
+<div class="app">
+  <aside class="side" id="side">
+    <a class="logo" href="./" aria-label="Qi home">
+      <img class="only-light" src="img/logo-light.webp" alt="Qi Cubic Intelligence">
+      <img class="only-dark" src="img/logo-dark.webp" alt="Qi Cubic Intelligence">
+    </a>
+    <button class="newchat" id="newChat"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New Chat</button>
+    <nav class="nav" id="nav">
+      <button data-view="chat" class="on"><svg class="i" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M8.5 12h.01M12 12h.01M15.5 12h.01"/></svg>Chat</button>
+      <button data-view="explore"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m15.5 8.5-2 5-5 2 2-5z"/></svg>Explore</button>
+      <button data-view="models"><svg class="i" viewBox="0 0 24 24"><path d="m12 3 8 4.5-8 4.5-8-4.5z"/><path d="m4 12 8 4.5 8-4.5"/><path d="m4 16.5 8 4.5 8-4.5"/></svg>Models</button>
+      <button data-view="library"><svg class="i" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>Library</button>
+      <button data-view="admin" id="navAdmin" hidden><svg class="i" viewBox="0 0 24 24"><path d="M12 3 4 6v6c0 5 3.5 8 8 9 4.5-1 8-4 8-9V6z"/><path d="m9 12 2 2 4-4"/></svg>Admin</button>
+    </nav>
+    <div class="hist" id="hist"></div>
+    <button class="me" id="meCard">
+      <span class="av"><img src="img/mascot.webp" alt=""></span>
+      <span><b id="meName">Qi member</b><span class="badge" id="meBadge">Member</span></span>
+    </button>
+  </aside>
+  <div class="scrim" id="scrim"></div>
 
-<dialog id="loginDlg">
-  <h3 style="margin:0">Welcome to Qi Chat</h3>
-  <div id="stepEmail">
-    <p>Log in with your email. We'll send you a 6-digit code.</p>
-    <label for="lEmail">Email</label><input id="lEmail" type="email" autocomplete="email" inputmode="email">
-    <div class="row"><span></span><button class="btn" id="lNext">Continue</button></div>
-  </div>
-  <div id="stepSignup" hidden>
-    <p>New here? Tell us who you are. The admin approves new people, and you'll get an email when you're in.</p>
-    <label for="sName">Name</label><input id="sName" autocomplete="name">
-    <label for="sMobile">Mobile number</label><input id="sMobile" type="tel" autocomplete="tel" inputmode="tel" placeholder="98xxxxxxxx">
-    <label for="sEmail">Email</label><input id="sEmail" type="email" autocomplete="email">
-    <div class="row"><button class="btn" id="sBack">Back</button><button class="btn" id="sSend">Ask for access</button></div>
-  </div>
-  <div id="stepCode" hidden>
-    <p id="codeNote">We sent a code to your email.</p>
-    <label for="lCode">Code</label><input id="lCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
-    <div class="row"><button class="btn" id="cBack">Use another email</button><button class="btn" id="cOk">Log in</button></div>
-  </div>
-  <div id="lMsg" class="msgline"></div>
-</dialog>
+  <main class="main">
+    <header class="top">
+      <button class="burger" id="burger" aria-label="Menu"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+      <div class="chips" id="chips"></div>
+      <button class="iconbtn" id="themeBtn" title="Light or dark"><svg class="i" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
+      <button class="iconbtn" id="bellBtn" title="Notifications" hidden><svg class="i" viewBox="0 0 24 24"><path d="M6 8a6 6 0 1 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg><span class="pip" id="bellPip" hidden></span></button>
+      <button class="iconbtn round" id="profileBtn" title="Account"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></button>
+    </header>
+    <div class="status" id="bar">Looking for Qi models…</div>
 
-<dialog id="menuDlg">
-  <h3 style="margin:0">Qi Chat</h3>
-  <p id="whoami"></p>
-  <div class="row" style="flex-direction:column;align-items:flex-start">
-    <button class="btn" id="mAdmin" style="display:none">Admin: people and models</button>
-    <button class="btn" id="mRefresh">Check models again</button>
-    <button class="btn" id="mOut">Log out</button>
-    <button class="btn" id="mClose">Close</button>
-  </div>
-</dialog>
+    <section class="view" id="vChat"><div id="log"></div></section>
+    <section class="view" id="vExplore" hidden><div class="page"><h2>Explore</h2><p>Tap an idea to start a new chat with Qi.</p><div class="ideas" id="exploreIdeas"></div></div></section>
+    <section class="view" id="vModels" hidden><div class="page"><h2>Models</h2><p>Pick a Qi brain. A green dot means it is on right now.</p><div id="modelCards"></div><div class="note" id="modelNote"></div></div></section>
+    <section class="view" id="vLibrary" hidden><div class="page"><h2>Library</h2><p>All your chats on this device.</p><input class="search" id="libSearch" placeholder="Search chats"><div id="libList"></div></div></section>
+    <section class="view" id="vAdmin" hidden><div class="page"><h2>Admin</h2><p>Approve people and switch the Qi models on or off.</p>
+      <h3>Models</h3><div id="aModels"></div><h3>People</h3><input class="search" id="peopleSearch" placeholder="Search people"><div id="aPeople"><p>Loading…</p></div><div class="note" id="aMsg"></div></div></section>
 
-<dialog id="adminDlg">
-  <div class="row" style="margin:0"><h3 style="margin:0">Admin</h3><button class="btn" id="aClose">Close</button></div>
-  <h4 style="margin:14px 0 4px">Models</h4>
-  <div id="aModels"></div>
-  <h4 style="margin:14px 0 4px">People</h4>
-  <div id="aPeople"><p>Loading…</p></div>
-  <div id="aMsg" class="msgline"></div>
-</dialog>
+    <div class="attached" id="attached" hidden></div>
+    <form class="composer" id="form">
+      <div class="box">
+        <button type="button" class="iconbtn" id="attachBtn" title="Attach a text file"><svg class="i" viewBox="0 0 24 24"><path d="m21 11.5-8.5 8.5a5.5 5.5 0 0 1-7.8-7.8l9-9a3.7 3.7 0 0 1 5.2 5.2l-9 9a1.8 1.8 0 0 1-2.6-2.6l8.3-8.3"/></svg></button>
+        <input type="file" id="fileIn" accept=".txt,.md,.csv,.json,.log,.py,.js,.html,.css,.xml,text/*" hidden>
+        <textarea id="input" rows="1" placeholder="Message Qi..." autocomplete="off"></textarea>
+        <button type="button" class="iconbtn" id="micBtn" title="Speak" hidden><svg class="i" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+      </div>
+      <button class="sendbtn" id="send" aria-label="Send"><svg class="i" viewBox="0 0 24 24"><path d="M22 2 11 13"/><path d="m22 2-7 20-4-9-9-4z"/></svg></button>
+    </form>
+  </main>
+</div>
+
+<!-- login -->
+<div class="gate" id="gate" hidden>
+  <div class="card">
+    <div class="logo"><img class="only-light" src="img/logo-light.webp" alt="Qi Cubic Intelligence"><img class="only-dark" src="img/logo-dark.webp" alt="Qi Cubic Intelligence"></div>
+    <div class="tabs"><button id="tMember" class="on">Team member</button><button id="tAdmin">Admin</button></div>
+    <div id="gMember">
+      <div id="stepEmail">
+        <label for="lEmail">Email</label><input id="lEmail" type="email" autocomplete="email" inputmode="email" placeholder="you@example.com">
+        <div class="row"><button class="btn pri" id="lNext">Send me a code</button></div>
+      </div>
+      <div id="stepSignup" hidden>
+        <p class="s">New here? Tell us who you are. The admin approves new people, and you'll get an email when you're in.</p>
+        <label for="sName">Name</label><input id="sName" autocomplete="name">
+        <label for="sMobile">Mobile number</label><input id="sMobile" type="tel" autocomplete="tel" inputmode="tel" placeholder="98xxxxxxxx">
+        <label for="sEmail">Email</label><input id="sEmail" type="email" autocomplete="email">
+        <div class="row"><button class="btn" id="sBack">Back</button><button class="btn pri" id="sSend">Ask for access</button></div>
+      </div>
+      <div id="stepCode" hidden>
+        <p class="s" id="codeNote">We sent a code to your email.</p>
+        <label for="lCode">6-digit code</label><input id="lCode" inputmode="numeric" autocomplete="one-time-code" maxlength="6">
+        <div class="row"><button class="btn" id="cBack">Use another email</button><button class="btn pri" id="cOk">Log in</button></div>
+      </div>
+    </div>
+    <div id="gAdmin" hidden>
+      <div id="aLoginStep">
+        <label for="aId">Admin ID</label><input id="aId" autocomplete="username" placeholder="pruthvi.er">
+        <label for="aPw">Password</label><input id="aPw" type="password" autocomplete="current-password">
+        <div class="row"><button class="btn pri" id="aLogin">Log in</button><button class="link" id="aForgot">Set or forgot password</button></div>
+      </div>
+      <div id="aResetStep" hidden>
+        <p class="s" id="aResetNote">We sent a code to the admin email.</p>
+        <label for="aCode">6-digit code</label><input id="aCode" inputmode="numeric" maxlength="6" autocomplete="one-time-code">
+        <label for="aNewPw">New password</label><input id="aNewPw" type="password" autocomplete="new-password">
+        <div class="row"><button class="btn" id="aBack">Back</button><button class="btn pri" id="aSave">Save password</button></div>
+      </div>
+    </div>
+    <div class="note" id="lMsg"></div>
+  </div>
+</div>
+<div class="menu" id="menu" hidden></div>
 
 <script>
 const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
 const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const store = {
   get(k, d) { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
   del(k) { try { localStorage.removeItem(k); } catch {} }
 };
-// Each running Qi server posts its current address to an open notice board; the newest note per model wins.
+const ICON = {
+  copy: '<svg class="i" viewBox="0 0 24 24"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>',
+  up: '<svg class="i" viewBox="0 0 24 24"><path d="M7 11v10H4V11zM7 11l4-8a2 2 0 0 1 3 2l-1 5h6a2 2 0 0 1 2 2.3l-1.3 7A2 2 0 0 1 17.7 21H7"/></svg>',
+  down: '<svg class="i" viewBox="0 0 24 24"><path d="M7 13V3H4v10zM7 13l4 8a2 2 0 0 0 3-2l-1-5h6a2 2 0 0 0 2-2.3l-1.3-7A2 2 0 0 0 17.7 3H7"/></svg>',
+  again: '<svg class="i" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg>',
+  more: '<svg class="i" viewBox="0 0 24 24"><path d="M5 12h.01M12 12h.01M19 12h.01"/></svg>',
+  chat: '<svg class="i" viewBox="0 0 24 24" style="width:16px;height:16px"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2 2"/></svg>',
+  user: '<svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg>',
+};
+const MASCOT = 'img/mascot.webp';
+const mascot = (cls = '') => `<div class="mascot ${cls}"><img src="${MASCOT}" alt=""></div>`;
+
+// ---------- settings ----------
 const BOARD = 'https://ntfy.sh/qcubic-qi-models-f207696921/json?poll=1&since=13h';
 const MODELS = [
-  { slug: 'qi-ultra', name: 'Qi Ultra', where: 'Kaggle', canStart: true },
-  { slug: 'qi-pro',   name: 'Qi Pro',   where: 'Google Colab', startPage: 'https://colab.research.google.com/drive/1PQ7IENmbXdC5aA3C2uRSU4XsomglTc4I' },
+  { slug: 'qi-ultra', name: 'Qi Ultra', where: 'Kaggle, two T4 GPUs', about: 'The big, smartest Qi brain. Best for hard questions and research.', canStart: true },
+  { slug: 'qi-pro',   name: 'Qi Pro',   where: 'Google Colab, one T4 GPU', about: 'The fast Qi brain. Great for everyday questions.',
+    startPage: 'https://colab.research.google.com/drive/1PQ7IENmbXdC5aA3C2uRSU4XsomglTc4I' },
 ];
+const IDEAS = [
+  ['Research', 'What are the top AI news stories today?'], ['Engineering', 'Help me choose a motor for a 20 kg robot that climbs a 15° slope.'],
+  ['Business', 'Write a one-page business plan for a small SaaS product.'], ['Design', 'Give me 5 ideas for a modern website home page for Q-CUBIC.'],
+  ['Learn', 'Explain stress and strain like I am a first-year engineering student.'], ['Writing', 'Write a short Instagram caption for a robot video, in lowercase.'],
+];
+
 let models = MODELS.map(m => ({ ...m, url: '', online: false, stats: null }));
 let AUTH_URL = '';
-let auth = store.get('qi.auth', null);          // { token, name, email, role }
+let auth = store.get('qi.auth', null);
 let currentName = store.get('qi.currentName', '');
-let chat = store.get('qi.chat', { id: crypto.randomUUID(), messages: [] });
-let busy = false, picked = false;
+let picked = false, busy = false, view = 'chat', attachedText = null;
 
-async function api(action, data = {}) {
-  if (!AUTH_URL) {
-    try { AUTH_URL = (await (await fetch('config.json', { cache: 'no-store' })).json()).auth_url || ''; } catch {}
+// ---------- chats (many, saved on this device) ----------
+let chats = store.get('qi.chats', null);
+if (!chats) { const old = store.get('qi.chat', null); chats = old && old.messages && old.messages.length ? [{ ...old, title: titleOf(old), updated: Date.now() }] : []; }
+let chat = chats.find(c => c.id === store.get('qi.cur', '')) || null;
+function titleOf(c) { const m = (c.messages || []).find(x => x.role === 'user'); return m ? m.content.slice(0, 60) : 'New chat'; }
+function saveChats() {
+  if (chat && chat.messages.length) {
+    chat.title = titleOf(chat); chat.updated = Date.now();
+    if (!chats.includes(chat)) chats.unshift(chat);
   }
+  chats.sort((a, b) => b.updated - a.updated);
+  chats = chats.slice(0, 200);
+  store.set('qi.chats', chats); store.set('qi.cur', chat ? chat.id : '');
+  drawHistory();
+}
+function newChat() { chat = { id: crypto.randomUUID(), messages: [], updated: Date.now() }; store.set('qi.cur', ''); show('chat'); render(); drawHistory(); closeSide(); $('#input').focus(); }
+function openChat(id) { chat = chats.find(c => c.id === id); store.set('qi.cur', id); show('chat'); render(); drawHistory(); closeSide(); }
+function drawHistory() {
+  const now = new Date(), day = d => new Date(d).toDateString();
+  const yest = new Date(now - 864e5).toDateString();
+  const groups = { Today: [], Yesterday: [], Earlier: [] };
+  for (const c of chats) { const d = day(c.updated); (d === now.toDateString() ? groups.Today : d === yest ? groups.Yesterday : groups.Earlier).push(c); }
+  $('#hist').innerHTML = Object.entries(groups).filter(([, l]) => l.length).map(([g, l]) =>
+    `<h4>${g}</h4>` + l.slice(0, 30).map(c => `<button data-id="${c.id}" class="${chat && chat.id === c.id ? 'on' : ''}">${ICON.chat}<span>${esc(c.title)}</span></button>`).join('')).join('');
+  $$('#hist button').forEach(b => b.onclick = () => openChat(b.dataset.id));
+}
+
+// ---------- login service ----------
+async function api(action, data = {}) {
+  if (!AUTH_URL) { try { AUTH_URL = (await (await fetch('config.json', { cache: 'no-store' })).json()).auth_url || ''; } catch {} }
   if (!AUTH_URL) return { ok: false, error: 'Login is not set up yet.' };
   try {
-    const r = await fetch(AUTH_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' },
-      body: JSON.stringify({ action, token: auth && auth.token, ...data }) });
+    const r = await fetch(AUTH_URL, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ action, token: auth && auth.token, ...data }) });
     return await r.json();
   } catch { return { ok: false, error: 'Could not reach the login service. Check your internet and try again.' }; }
 }
-
-// ---------- login ----------
+function lmsg(t, err) { $('#lMsg').textContent = t || ''; $('#lMsg').className = 'note' + (err ? ' err' : ''); }
 function step(id) { for (const s of ['stepEmail', 'stepSignup', 'stepCode']) $('#' + s).hidden = s !== id; }
-function lmsg(t, err) { $('#lMsg').textContent = t || ''; $('#lMsg').className = 'msgline' + (err ? ' err' : ''); }
-function showLogin(note) { step('stepEmail'); lmsg(note || ''); if (!$('#loginDlg').open) $('#loginDlg').showModal(); }
-$('#loginDlg').addEventListener('cancel', e => e.preventDefault());       // cannot be closed without logging in
+function gateTab(admin) { $('#tMember').classList.toggle('on', !admin); $('#tAdmin').classList.toggle('on', admin); $('#gMember').hidden = admin; $('#gAdmin').hidden = !admin; lmsg(''); }
+function showLogin(note) { $('#gate').hidden = false; step('stepEmail'); gateTab(false); lmsg(note || ''); }
+$('#tMember').onclick = () => gateTab(false);
+$('#tAdmin').onclick = () => { gateTab(true); $('#aLoginStep').hidden = false; $('#aResetStep').hidden = true; };
 let loginEmail = '';
+const enter = (el, btn) => el.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); btn.click(); } });
 $('#lNext').onclick = async () => {
   loginEmail = $('#lEmail').value.trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(loginEmail)) return lmsg('Please enter a valid email.', true);
@@ -166,30 +389,62 @@ $('#lNext').onclick = async () => {
   else if (r.error === 'blocked') lmsg('This email does not have access to Qi Chat.', true);
   else lmsg(r.error || 'Something went wrong.', true);
 };
-$('#lEmail').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#lNext').click(); } });
+enter($('#lEmail'), $('#lNext'));
 $('#sBack').onclick = () => { step('stepEmail'); lmsg(''); };
 $('#sSend').onclick = async () => {
   lmsg('Sending your request…');
   const r = await api('register', { name: $('#sName').value, mobile: $('#sMobile').value, email: $('#sEmail').value });
   if (!r.ok) return lmsg(r.error || 'Something went wrong.', true);
   step('stepEmail');
-  lmsg(r.status === 'approved' ? 'You already have access. Press Continue to get your code.'
-       : 'Thank you! Your request was sent to the admin. You will get an email when you are approved.');
+  lmsg(r.status === 'approved' ? 'You already have access. Press "Send me a code".' : 'Thank you! Your request was sent to the admin. You will get an email when you are approved.');
 };
 $('#cBack').onclick = () => { step('stepEmail'); lmsg(''); };
 $('#cOk').onclick = async () => {
   lmsg('Checking…');
   const r = await api('verify', { email: loginEmail, code: $('#lCode').value });
   if (!r.ok) return lmsg(r.error || 'That did not work.', true);
-  auth = { token: r.token, name: r.name, email: r.email, role: r.role }; store.set('qi.auth', auth);
-  $('#lCode').value = ''; $('#loginDlg').close(); afterLogin();
+  loggedIn(r); $('#lCode').value = '';
 };
-$('#lCode').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('#cOk').click(); } });
+enter($('#lCode'), $('#cOk'));
+$('#aLogin').onclick = async () => {
+  lmsg('Checking…');
+  const r = await api('adminLogin', { id: $('#aId').value, password: $('#aPw').value });
+  $('#aPw').value = '';
+  if (!r.ok) return lmsg(r.error || 'That did not work.', true);
+  loggedIn(r);
+};
+enter($('#aPw'), $('#aLogin'));
+$('#aForgot').onclick = async () => {
+  const id = $('#aId').value.trim() || 'pruthvi.er';
+  lmsg('Sending a code to the admin email…');
+  const r = await api('adminResetCode', { id });
+  if (!r.ok) return lmsg(r.error || 'Could not send the code.', true);
+  $('#aLoginStep').hidden = true; $('#aResetStep').hidden = false;
+  $('#aResetNote').textContent = 'We sent a 6-digit code to ' + (r.to || 'the admin email') + '. Type it with your new password.'; lmsg('');
+};
+$('#aBack').onclick = () => { $('#aLoginStep').hidden = false; $('#aResetStep').hidden = true; lmsg(''); };
+$('#aSave').onclick = async () => {
+  lmsg('Saving…');
+  const r = await api('adminSetPassword', { code: $('#aCode').value, password: $('#aNewPw').value });
+  $('#aNewPw').value = '';
+  if (!r.ok) return lmsg(r.error || 'Could not save.', true);
+  $('#aLoginStep').hidden = false; $('#aResetStep').hidden = true; $('#aCode').value = '';
+  lmsg('Password saved. Log in with your admin ID and the new password.');
+};
+function loggedIn(r) { auth = { token: r.token, name: r.name, email: r.email, role: r.role }; store.set('qi.auth', auth); $('#gate').hidden = true; lmsg(''); afterLogin(); }
 function logout(note) { auth = null; store.del('qi.auth'); showLogin(note); }
 function afterLogin() {
-  $('#whoami').textContent = auth ? 'Logged in as ' + auth.name + ' (' + auth.email + ')' : '';
-  $('#mAdmin').style.display = auth && auth.role === 'admin' ? '' : 'none';
-  loadModels();
+  const admin = auth && auth.role === 'admin';
+  $('#meName').textContent = auth ? auth.name : 'Qi member';
+  $('#meBadge').textContent = admin ? '👑 Admin' : 'Member';
+  $('#navAdmin').hidden = !admin; $('#bellBtn').hidden = !admin;
+  loadModels(); if (admin) checkPending();
+}
+async function checkPending() {
+  const r = await api('listUsers');
+  const n = r.ok ? r.users.filter(u => u.status === 'pending').length : 0;
+  $('#bellPip').hidden = !n; $('#bellBtn').title = n ? n + ' people waiting for approval' : 'No one waiting';
+  return r;
 }
 
 // ---------- models ----------
@@ -201,10 +456,7 @@ async function check(s) {
     if (!h.ok) return { online: false, stats: null };
     try { if ((await h.json()).ok === false) return { online: false, stats: null }; } catch {}
     let stats = null;
-    try {
-      const r = await fetch(s.url + '/qi/stats', { headers: { Authorization: 'Bearer ' + (auth && auth.token) }, signal: timeout(8000) });
-      if (r.ok) stats = await r.json();
-    } catch {}
+    try { const r = await fetch(s.url + '/qi/stats', { headers: { Authorization: 'Bearer ' + (auth && auth.token) }, signal: timeout(8000) }); if (r.ok) stats = await r.json(); } catch {}
     return { online: true, stats };
   } catch { return { online: false, stats: null }; }
 }
@@ -213,209 +465,289 @@ async function loadModels() {
     const r = await fetch(BOARD, { cache: 'no-store' });
     const notes = {};
     for (const line of (await r.text()).split('\n')) {
-      try {
-        const e = JSON.parse(line); if (e.event !== 'message') continue;
-        const n = JSON.parse(e.message);
-        if (n.slug && (!notes[n.slug] || e.time >= notes[n.slug].t)) notes[n.slug] = { ...n, t: e.time };
-      } catch {}
+      try { const e = JSON.parse(line); if (e.event !== 'message') continue; const n = JSON.parse(e.message);
+            if (n.slug && (!notes[n.slug] || e.time >= notes[n.slug].t)) notes[n.slug] = { ...n, t: e.time }; } catch {}
     }
     for (const m of models) { const n = notes[m.slug]; if (n) m.url = n.url || ''; }
   } catch {}
   await Promise.all(models.map(async m => Object.assign(m, await check(m))));
-  fillServers(); showBar();
-  if ($('#adminDlg').open) drawModels();
+  drawChips(); showBar();
+  if (view === 'models') drawModelCards();
+  if (view === 'admin') drawAdminModels();
 }
 function current() {
   const want = models.find(x => x.name === currentName);
   if (want && (want.online || picked)) return want;
   return models.find(x => x.online) || want || models[0];
 }
-function fillServers() {
-  const sel = $('#server'); sel.innerHTML = '';
-  for (const s of models) sel.add(new Option((s.online ? '● ' : '○ ') + s.name + (s.online ? '' : ' (off)'), s.name));
-  const c = current(); if (c) sel.value = c.name;
+function drawChips() {
+  const c = current();
+  $('#chips').innerHTML = models.map(m => `<button class="chip ${m === c ? 'on' : ''}" data-n="${esc(m.name)}"><span class="dot ${m.online ? 'up' : ''}"></span>${esc(m.name)}</button>`).join('');
+  $$('#chips .chip').forEach(b => b.onclick = () => pick(b.dataset.n));
+}
+function pick(name) {
+  if (name === current().name && picked) return;
+  currentName = name; picked = true; store.set('qi.currentName', name); drawChips(); showBar();
+  if (chat && chat.messages.length) { chat.messages.push({ role: 'switch', content: name }); saveChats(); render(); }
 }
 function showBar() {
   const c = current(), bar = $('#bar');
   if (!c.online) {
     const on = models.filter(x => x.online).map(x => x.name);
-    bar.innerHTML = '<span class="dot"></span><b>' + esc(c.name) + '</b> is switched off right now' +
-      (on.length ? '. Online: ' + esc(on.join(', ')) + '.' : '. No Qi model is on right now.');
+    bar.innerHTML = `<span class="dot"></span><b>${esc(c.name)}</b> is switched off right now` + (on.length ? ` · online: ${esc(on.join(', '))}` : ' · no Qi model is on right now');
     return;
   }
-  const st = c.stats, bits = ['<span class="dot on"></span><b>' + esc(c.name) + '</b> is online', 'on ' + esc(c.where)];
+  const st = c.stats, bits = [`<span class="dot up"></span><b>${esc(c.name)}</b> is online`, 'on ' + esc(c.where.split(',')[0])];
   if (st) { bits.push(st.busy + ' of ' + st.slots + ' answering now'); bits.push(st.chats_today + ' chats today'); }
   bar.innerHTML = bits.join(' · ');
+}
+function drawModelCards() {
+  $('#modelCards').innerHTML = models.map(m => `
+    <div class="card"><div class="t"><span class="dot ${m.online ? 'up' : ''}" style="width:10px;height:10px;border-radius:50%;background:${m.online ? 'var(--ok)' : '#b9b9bf'}"></span>${esc(m.name)}
+      <span class="pill">${m.online ? 'on' : 'off'}</span></div>
+      <div class="s">${esc(m.about)}<br>Runs on ${esc(m.where)}${m.stats ? ' · ' + m.stats.chats_today + ' chats today' : ''}</div>
+      <div class="row"><button class="btn pri" data-use="${esc(m.name)}" ${m.online ? '' : 'disabled'}>Chat with ${esc(m.name)}</button></div></div>`).join('');
+  $$('#modelCards [data-use]').forEach(b => b.onclick = () => { pick(b.dataset.use); show('chat'); });
 }
 
 // ---------- chat ----------
 function md(t) {
-  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-  const blocks = t.split(/```/);
-  return blocks.map((b, i) => {
-    if (i % 2) return '<pre><code>' + esc(b.replace(/^[a-z0-9]*\n/i, '')) + '</code></pre>';
-    let h = esc(b);
-    h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>')
-         .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
-         .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
-         .replace(/^#{1,6} (.*)$/gm, '<b>$1</b>')
-         .replace(/^\s*[-*] (.*)$/gm, '• $1')
-         .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
-         .replace(/(^|[\s(])(https?:\/\/[^\s)<]*[^\s)<.,;:!?'])/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
-    return h;
+  const e = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  return t.split(/```/).map((b, i) => {
+    if (i % 2) return '<pre><code>' + e(b.replace(/^[a-z0-9]*\n/i, '')) + '</code></pre>';
+    return e(b).replace(/`([^`\n]+)`/g, '<code>$1</code>')
+      .replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>')
+      .replace(/(^|[^*])\*([^*\n]+)\*/g, '$1<i>$2</i>')
+      .replace(/^#{1,6} (.*)$/gm, '<b>$1</b>')
+      .replace(/^\s*[-*] (.*)$/gm, '• $1')
+      .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>')
+      .replace(/(^|[\s(])(https?:\/\/[^\s)<]*[^\s)<.,;:!?'])/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
   }).join('');
 }
-function setMd(el, t) { el.innerHTML = md(t); }
-function bubble(role, text) {
-  const row = document.createElement('div'); row.className = 'msg ' + (role === 'user' ? 'user' : 'qi');
-  const b = document.createElement('div'); b.className = 'bubble';
-  if (role === 'user') b.textContent = text; else setMd(b, text);
-  row.append(b); $('#log').append(row); $('#log').scrollTop = 1e9; return b;
-}
-function switchNote(name) { const d = document.createElement('div'); d.className = 'switch'; d.textContent = 'Now talking to ' + name; $('#log').append(d); }
 function render() {
-  $('#log').innerHTML = '';
-  if (!chat.messages.length) $('#log').innerHTML = '<p class="note">Hi! I\'m Qi by Q-CUBIC. Choose a Qi model at the top and ask me anything.</p>';
-  for (const m of chat.messages) { if (m.role === 'switch') switchNote(m.content); else bubble(m.role, m.content); }
+  const log = $('#log');
+  if (!chat || !chat.messages.length) {
+    const first = auth ? auth.name.split(' ')[0] : '';
+    log.innerHTML = `<div class="hello">${mascot('pop')}<h2>Hi${first ? ' ' + esc(first) : ''}! I'm Qi.</h2><p>Cubic Intelligence by Q-CUBIC. What shall we work on?</p>
+      <div class="ideas">${IDEAS.slice(0, 4).map(([k, q]) => `<button class="idea" data-q="${esc(q)}"><b>${esc(k)}</b>${esc(q)}</button>`).join('')}</div></div>`;
+    $$('#log .idea').forEach(b => b.onclick = () => ask(b.dataset.q));
+    return;
+  }
+  log.innerHTML = '';
+  chat.messages.forEach((m, i) => log.append(row(m, i)));
+  log.parentElement.scrollTop = 1e9;
 }
-async function send(text) {
+function row(m, i) {
+  const d = document.createElement('div');
+  if (m.role === 'switch') { d.className = 'switch'; d.textContent = 'Now talking to ' + m.content; return d; }
+  if (m.role === 'user') { d.className = 'msg user'; d.innerHTML = `<div class="bubble"></div><div class="uav">${ICON.user}</div>`; d.querySelector('.bubble').textContent = m.content; return d; }
+  d.className = 'msg qi';
+  d.innerHTML = `${mascot()}<div class="qcol"><div class="bubble">${md(m.content)}</div>
+    <div class="acts"><button title="Copy" data-a="copy">${ICON.copy}</button><button title="Good answer" data-a="up" class="${m.fb === 'up' ? 'on' : ''}">${ICON.up}</button>
+    <button title="Bad answer" data-a="down" class="${m.fb === 'down' ? 'on' : ''}">${ICON.down}</button><button title="Answer again" data-a="again">${ICON.again}</button>
+    <button title="More" data-a="more">${ICON.more}</button></div></div>`;
+  d.querySelectorAll('.acts button').forEach(b => b.onclick = ev => msgAction(b.dataset.a, i, ev));
+  return d;
+}
+function toast(t) { const d = document.createElement('div'); d.className = 'toast'; d.textContent = t; document.body.append(d); setTimeout(() => d.remove(), 1800); }
+async function msgAction(a, i, ev) {
+  const m = chat.messages[i];
+  if (a === 'copy') { try { await navigator.clipboard.writeText(m.content); toast('Copied'); } catch { toast('Could not copy'); } }
+  if (a === 'up' || a === 'down') { m.fb = m.fb === a ? '' : a; saveChats(); render(); if (m.fb) toast('Thanks for the feedback'); }
+  if (a === 'again') { if (busy) return; const before = chat.messages.slice(0, i); const q = [...before].reverse().find(x => x.role === 'user'); if (!q) return;
+    chat.messages = before.filter(x => x !== q); saveChats(); ask(q.content); }
+  if (a === 'more') openMenu(ev.currentTarget, [
+    ['Read aloud', () => { try { speechSynthesis.cancel(); speechSynthesis.speak(new SpeechSynthesisUtterance(m.content.replace(/[*#`_]/g, ''))); } catch {} }],
+    ['Stop reading', () => { try { speechSynthesis.cancel(); } catch {} }],
+    ['Delete this answer', () => { chat.messages.splice(i, 1); saveChats(); render(); }]]);
+}
+async function ask(text) {
   if (!auth) return showLogin();
+  if (!chat) chat = { id: crypto.randomUUID(), messages: [], updated: Date.now() };
+  show('chat');
   const s = current();
-  if (!s || !s.online) { $('#bar').innerHTML = 'No Qi model is on right now. Pick one with a green dot.'; return; }
-  chat.messages.push({ role: 'user', content: text });
-  if (chat.messages.length === 1) $('#log').innerHTML = '';
-  bubble('user', text);
-  const out = bubble('assistant', '…');
+  if (!s.online) { toast(s.name + ' is off right now. Pick a model with a green dot.'); return; }
+  let content = text;
+  if (attachedText) { content = text + '\n\n[Attached file: ' + attachedText.name + ']\n' + attachedText.text; clearAttach(); }
+  chat.messages.push({ role: 'user', content }); saveChats(); render();
+  const d = document.createElement('div'); d.className = 'msg qi';
+  d.innerHTML = `${mascot('think')}<div class="qcol"><div class="bubble"><span class="typing"><i></i><i></i><i></i><span class="st">&nbsp;Thinking</span></span></div></div>`;
+  $('#log').append(d); $('#vChat').scrollTop = 1e9;
+  const out = d.querySelector('.bubble');
   busy = true; $('#send').disabled = true;
   let answer = '', status = 'Thinking';
   try {
-    const history = chat.messages.filter(m => m.role !== 'switch').slice(-20);
-    const r = await fetch(s.url + '/v1/chat/completions', {
-      method: 'POST',
+    const history = chat.messages.filter(m => m.role !== 'switch').map(m => ({ role: m.role, content: m.content })).slice(-20);
+    const r = await fetch(s.url + '/v1/chat/completions', { method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + auth.token },
-      body: JSON.stringify({ messages: history, stream: true, qi_chat: chat.id, temperature: 0.7 })
-    });
-    if (r.status === 401) { chat.messages.pop(); out.textContent = 'Please log in again.'; logout('Your login has ended. Please log in again.'); return; }
-    if (!r.ok) {
-      let msg = s.name + ' could not answer (' + r.status + ').';
-      try { msg = (await r.json()).error.message || msg; } catch {}
-      throw new Error(msg);
-    }
-    const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
+      body: JSON.stringify({ messages: history, stream: true, qi_chat: chat.id, temperature: 0.7 }) });
+    if (r.status === 401) { chat.messages.pop(); saveChats(); logout('Your login has ended. Please log in again.'); return; }
+    if (!r.ok) { let msg = s.name + ' could not answer (' + r.status + ').'; try { msg = (await r.json()).error.message || msg; } catch {} throw new Error(msg); }
+    const reader = r.body.getReader(), dec = new TextDecoder(); let buf = '';
     while (true) {
       const { value, done } = await reader.read(); if (done) break;
       buf += dec.decode(value, { stream: true });
       const lines = buf.split('\n'); buf = lines.pop();
       for (const line of lines) {
         if (!line.startsWith('data: ') || line.includes('[DONE]')) continue;
-        try {
-          const j = JSON.parse(line.slice(6));
-          if (j.qi_status) { status = j.qi_status; continue; }
-          if (j.error) throw new Error(j.error.message);
-          answer += j.choices[0].delta.content || '';
+        try { const j = JSON.parse(line.slice(6));
+              if (j.qi_status) { status = j.qi_status; continue; }
+              if (j.error) throw new Error(j.error.message);
+              answer += j.choices[0].delta.content || '';
         } catch (e) { if (e.message && e.message.startsWith('Qi brain')) throw e; }
       }
-      if (answer) setMd(out, answer); else out.textContent = status + ' …';
-      $('#log').scrollTop = 1e9;
+      if (answer) out.innerHTML = md(answer); else out.querySelector('.st').textContent = ' ' + status;
+      $('#vChat').scrollTop = 1e9;
     }
-    chat.messages.push({ role: 'assistant', content: answer });
+    chat.messages.push({ role: 'assistant', content: answer || '…' });
   } catch (e) {
-    out.textContent = (e.message || '').includes('Failed to fetch') || e.name === 'TypeError'
-      ? s.name + ' is not reachable right now; it may have been switched off. Pick another Qi model at the top.'
-      : e.message;
-    chat.messages.pop();
+    chat.messages.push({ role: 'assistant', content: ((e.message || '').includes('Failed to fetch') || e.name === 'TypeError')
+      ? s.name + ' is not reachable right now; it may have been switched off. Pick another Qi model at the top.' : e.message });
     loadModels();
   } finally {
-    store.set('qi.chat', chat);
-    busy = false; $('#send').disabled = false;
+    saveChats(); render(); busy = false; $('#send').disabled = false;
   }
 }
-$('#form').addEventListener('submit', e => {
-  e.preventDefault(); const t = $('#input').value.trim();
-  if (!t || busy) return; $('#input').value = ''; autosize(); send(t);
-});
-$('#input').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches) { e.preventDefault(); $('#form').requestSubmit(); }
-});
-function autosize() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 140) + 'px'; }
+$('#form').addEventListener('submit', e => { e.preventDefault(); const t = $('#input').value.trim(); if (!t || busy) return; $('#input').value = ''; autosize(); ask(t); });
+$('#input').addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey && !matchMedia('(pointer:coarse)').matches) { e.preventDefault(); $('#form').requestSubmit(); } });
+function autosize() { const t = $('#input'); t.style.height = 'auto'; t.style.height = Math.min(t.scrollHeight, 180) + 'px'; }
 $('#input').addEventListener('input', autosize);
-$('#newChat').onclick = () => { chat = { id: crypto.randomUUID(), messages: [] }; store.set('qi.chat', chat); render(); };
-$('#server').onchange = e => {
-  currentName = e.target.value; picked = true; store.set('qi.currentName', currentName); showBar();
-  if (chat.messages.length) { chat.messages.push({ role: 'switch', content: currentName }); store.set('qi.chat', chat); switchNote(currentName); $('#log').scrollTop = 1e9; }
+
+// attach a text file
+$('#attachBtn').onclick = () => $('#fileIn').click();
+$('#fileIn').onchange = async () => {
+  const f = $('#fileIn').files[0]; $('#fileIn').value = ''; if (!f) return;
+  if (f.size > 200000) return toast('Please attach a text file under 200 KB');
+  attachedText = { name: f.name, text: (await f.text()).slice(0, 60000) };
+  $('#attached').hidden = false; $('#attached').innerHTML = `📎 ${esc(f.name)} will be sent with your next message · <button class="link" id="rmAtt">remove</button>`;
+  $('#rmAtt').onclick = clearAttach;
+};
+function clearAttach() { attachedText = null; $('#attached').hidden = true; }
+// speak instead of typing
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+if (SR) {
+  $('#micBtn').hidden = false; let rec = null;
+  $('#micBtn').onclick = () => {
+    if (rec) { rec.stop(); return; }
+    rec = new SR(); rec.lang = navigator.language || 'en-IN'; rec.interimResults = true;
+    const base = $('#input').value; $('#micBtn').classList.add('rec');
+    rec.onresult = e => { $('#input').value = (base ? base + ' ' : '') + [...e.results].map(r => r[0].transcript).join(''); autosize(); };
+    rec.onend = () => { rec = null; $('#micBtn').classList.remove('rec'); };
+    rec.start();
+  };
+}
+
+// ---------- views, menus, theme ----------
+function show(v) {
+  view = v;
+  for (const [id, name] of [['vChat', 'chat'], ['vExplore', 'explore'], ['vModels', 'models'], ['vLibrary', 'library'], ['vAdmin', 'admin']]) $('#' + id).hidden = name !== v;
+  $('#form').hidden = v !== 'chat';
+  $$('#nav button').forEach(b => b.classList.toggle('on', b.dataset.view === v));
+  if (v === 'explore') $('#exploreIdeas').innerHTML = IDEAS.map(([k, q]) => `<button class="idea" data-q="${esc(q)}"><b>${esc(k)}</b>${esc(q)}</button>`).join(''),
+    $$('#exploreIdeas .idea').forEach(b => b.onclick = () => { newChat(); ask(b.dataset.q); });
+  if (v === 'models') drawModelCards();
+  if (v === 'library') drawLibrary();
+  if (v === 'admin') { drawAdminModels(); loadPeople(); }
+  closeSide();
+}
+$$('#nav button').forEach(b => b.onclick = () => show(b.dataset.view));
+$('#newChat').onclick = newChat;
+function drawLibrary() {
+  const q = $('#libSearch').value.trim().toLowerCase();
+  const list = chats.filter(c => !q || c.title.toLowerCase().includes(q) || c.messages.some(m => (m.content || '').toLowerCase().includes(q)));
+  $('#libList').innerHTML = list.map(c => `<div class="card"><div class="t">${esc(c.title)}</div><div class="s">${new Date(c.updated).toLocaleString()} · ${c.messages.filter(m => m.role !== 'switch').length} messages</div>
+    <div class="row"><button class="btn pri" data-open="${c.id}">Open</button><button class="btn warn" data-del="${c.id}">Delete</button></div></div>`).join('') || '<p class="s">No chats yet.</p>';
+  $$('#libList [data-open]').forEach(b => b.onclick = () => openChat(b.dataset.open));
+  $$('#libList [data-del]').forEach(b => b.onclick = () => {
+    if (b.dataset.sure !== '1') { b.dataset.sure = '1'; b.textContent = 'Tap again to delete'; return; }
+    chats = chats.filter(c => c.id !== b.dataset.del); if (chat && chat.id === b.dataset.del) chat = null; saveChats(); drawLibrary(); });
+}
+$('#libSearch').oninput = drawLibrary;
+function openSide() { $('#side').classList.add('open'); $('#scrim').classList.add('open'); }
+function closeSide() { $('#side').classList.remove('open'); $('#scrim').classList.remove('open'); }
+$('#burger').onclick = openSide; $('#scrim').onclick = closeSide;
+function openMenu(anchor, items, header) {
+  const m = $('#menu'); m.innerHTML = (header ? `<div class="who">${header}</div>` : '') + items.map((it, i) => `<button data-i="${i}">${esc(it[0])}</button>`).join('');
+  m.hidden = false;
+  const r = anchor.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  m.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + 'px';
+  m.style.top = (r.bottom + h + 8 < innerHeight ? r.bottom + 6 : Math.max(8, r.top - h - 6)) + 'px';
+  m.querySelectorAll('button').forEach(b => b.onclick = () => { m.hidden = true; items[+b.dataset.i][1](); });
+  setTimeout(() => document.addEventListener('click', function off(e) { if (!m.contains(e.target)) { m.hidden = true; document.removeEventListener('click', off); } }), 0);
+}
+function accountMenu(ev) {
+  const items = [['Models', () => show('models')], ['Library', () => show('library')]];
+  if (auth && auth.role === 'admin') items.push(['Admin: people and models', () => show('admin')]);
+  items.push(['Log out', () => logout('You are logged out.')]);
+  openMenu(ev.currentTarget, items, auth ? esc(auth.name) + '<br>' + esc(auth.email) : '');
+}
+$('#profileBtn').onclick = accountMenu; $('#meCard').onclick = accountMenu;
+$('#bellBtn').onclick = () => show('admin');
+function setTheme(t) { if (t) document.documentElement.dataset.theme = t; else delete document.documentElement.dataset.theme; store.set('qi.theme', t || null); }
+$('#themeBtn').onclick = () => {
+  const dark = document.documentElement.dataset.theme ? document.documentElement.dataset.theme === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches;
+  setTheme(dark ? 'light' : 'dark');
 };
 
-// ---------- menu and admin ----------
-$('#menuBtn').onclick = () => $('#menuDlg').showModal();
-$('#mClose').onclick = () => $('#menuDlg').close();
-$('#mRefresh').onclick = () => { $('#menuDlg').close(); $('#bar').textContent = 'Checking Qi models…'; loadModels(); };
-$('#mOut').onclick = () => { $('#menuDlg').close(); logout('You are logged out.'); };
-$('#mAdmin').onclick = () => { $('#menuDlg').close(); $('#adminDlg').showModal(); drawModels(); loadPeople(); };
-$('#aClose').onclick = () => $('#adminDlg').close();
-function amsg(t, err) { $('#aMsg').textContent = t || ''; $('#aMsg').className = 'msgline' + (err ? ' err' : ''); }
-
-function drawModels() {
-  $('#aModels').innerHTML = models.map((m, i) => `
-    <div class="card"><div class="t"><span class="dot ${m.online ? 'on' : ''}"></span>${esc(m.name)}
-      <span class="s">· ${esc(m.where)} · ${m.online ? 'on' : 'off'}${m.stats ? ' · ' + m.stats.chats_today + ' chats today' : ''}</span></div>
-      <div class="acts">${m.online ? `<button class="btn" data-stop="${i}">Stop</button>` : `<button class="btn" data-start="${i}">Start</button>`}</div></div>`).join('');
-  $('#aModels').querySelectorAll('[data-stop]').forEach(b => b.onclick = () => stopModel(models[+b.dataset.stop]));
-  $('#aModels').querySelectorAll('[data-start]').forEach(b => b.onclick = () => startModel(models[+b.dataset.start]));
-}
+// ---------- admin ----------
+function amsg(t, err) { $('#aMsg').textContent = t || ''; $('#aMsg').className = 'note' + (err ? ' err' : ''); }
 let armed = '';
-async function stopModel(m) {
-  if (armed !== m.slug) { armed = m.slug; setTimeout(() => { armed = ''; }, 8000);
-    return amsg('Press Stop again within 8 seconds to switch off ' + m.name + '. People chatting with it will be cut off.'); }
-  armed = '';
-  amsg('Switching off ' + m.name + '…');
-  try {
-    const r = await fetch(m.url + '/qi/admin/stop', { method: 'POST', headers: { Authorization: 'Bearer ' + auth.token } });
-    const d = await r.json();
-    amsg(d.ok ? m.name + ' is switching off. It shows as off within a minute.' : (d.error || 'Could not stop it.'), !d.ok);
+function drawAdminModels() {
+  $('#aModels').innerHTML = models.map((m, i) => `<div class="card"><div class="t"><span style="width:10px;height:10px;border-radius:50%;background:${m.online ? 'var(--ok)' : '#b9b9bf'}"></span>${esc(m.name)}
+    <span class="pill">${m.online ? 'on' : 'off'}</span></div><div class="s">${esc(m.where)}${m.stats ? ' · ' + m.stats.busy + ' of ' + m.stats.slots + ' answering · ' + m.stats.chats_today + ' chats today' : ''}</div>
+    <div class="row">${m.online ? `<button class="btn warn" data-stop="${i}">Stop</button>` : `<button class="btn pri" data-start="${i}">Start</button>`}</div></div>`).join('');
+  $$('#aModels [data-stop]').forEach(b => b.onclick = () => stopModel(models[+b.dataset.stop], b));
+  $$('#aModels [data-start]').forEach(b => b.onclick = () => startModel(models[+b.dataset.start]));
+}
+async function stopModel(m, b) {
+  if (armed !== m.slug) { armed = m.slug; b.textContent = 'Tap again to stop'; setTimeout(() => { armed = ''; drawAdminModels(); }, 8000); return; }
+  armed = ''; amsg('Switching off ' + m.name + '…');
+  try { const r = await fetch(m.url + '/qi/admin/stop', { method: 'POST', headers: { Authorization: 'Bearer ' + auth.token } }); const d = await r.json();
+        amsg(d.ok ? m.name + ' is switching off. It shows as off within a minute.' : (d.error || 'Could not stop it.'), !d.ok);
   } catch { amsg('Could not reach ' + m.name + '.', true); }
   setTimeout(loadModels, 30000);
 }
 async function startModel(m) {
-  if (m.startPage) {
-    window.open(m.startPage, '_blank', 'noopener');
-    return amsg(m.name + ' starts from its Colab notebook: press Run there and keep that tab open. It shows here in about 3 minutes.');
-  }
+  if (m.startPage) { window.open(m.startPage, '_blank', 'noopener'); return amsg(m.name + ' starts from its Colab notebook: press Run there and keep that tab open. It shows here in about 3 minutes.'); }
   amsg('Starting ' + m.name + '…');
   const r = await api('startUltra');
   if (r.ok) return amsg(m.name + ' is starting on Kaggle. It shows as on in about 5–10 minutes and runs up to 12 hours.');
   if (r.page) { window.open(r.page, '_blank', 'noopener'); return amsg('On the GitHub page, press Run workflow, then the green Run workflow.'); }
   amsg(r.error || 'Could not start it.', true);
 }
-
+let people = [];
 async function loadPeople() {
-  const r = await api('listUsers');
+  const r = await checkPending();
   if (!r.ok) { $('#aPeople').innerHTML = '<p>' + esc(r.error || 'Could not load people.') + '</p>'; return; }
   const order = { pending: 0, approved: 1, blocked: 2 };
-  const list = r.users.sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
-  $('#aPeople').innerHTML = list.map((u, i) => `
-    <div class="card"><div class="t">${esc(u.name)}<span class="pill ${esc(u.status)}">${esc(u.status)}</span>${u.role === 'admin' ? '<span class="pill">admin</span>' : ''}</div>
-      <div class="s">${esc(u.mobile)} · ${esc(u.email)}${u.last_login ? ' · last login ' + esc(u.last_login.slice(0, 10)) : ''}</div>
-      <div class="acts" data-i="${i}">
-        ${u.status !== 'approved' ? '<button class="btn" data-s="approved">Approve</button>' : ''}
-        ${u.status !== 'blocked' && u.email !== auth.email ? '<button class="btn" data-s="blocked">Block</button>' : ''}
-        ${u.status === 'approved' && u.role !== 'admin' ? '<button class="btn" data-r="admin">Make admin</button>' : ''}
-        ${u.role === 'admin' && u.email !== auth.email ? '<button class="btn" data-r="user">Remove admin</button>' : ''}
-      </div></div>`).join('') || '<p>No one yet.</p>';
-  $('#aPeople').querySelectorAll('.acts button').forEach(b => b.onclick = async () => {
-    const u = list[+b.parentElement.dataset.i];
+  people = r.users.sort((a, b) => (order[a.status] ?? 3) - (order[b.status] ?? 3));
+  drawPeople();
+}
+function drawPeople() {
+  const q = $('#peopleSearch').value.trim().toLowerCase();
+  const list = people.filter(u => !q || [u.name, u.email, u.mobile].join(' ').toLowerCase().includes(q));
+  $('#aPeople').innerHTML = list.map(u => `<div class="card"><div class="t">${esc(u.name)}<span class="pill ${esc(u.status)}">${esc(u.status)}</span>${u.role === 'admin' ? '<span class="pill">admin</span>' : ''}</div>
+    <div class="s">📱 ${esc(u.mobile || '—')} · ✉️ ${esc(u.email)}${u.last_login ? ' · last login ' + esc(u.last_login.slice(0, 10)) : ''}</div>
+    <div class="row" data-e="${esc(u.email)}">
+      ${u.status !== 'approved' ? '<button class="btn pri" data-s="approved">Approve</button>' : ''}
+      ${u.status !== 'blocked' && u.email !== auth.email ? '<button class="btn warn" data-s="blocked">Block</button>' : ''}
+      ${u.status === 'approved' && u.role !== 'admin' ? '<button class="btn" data-r="admin">Make admin</button>' : ''}
+      ${u.role === 'admin' && u.email !== auth.email ? '<button class="btn" data-r="user">Remove admin</button>' : ''}</div></div>`).join('') || '<p class="s">No one yet.</p>';
+  $$('#aPeople .row button').forEach(b => b.onclick = async () => {
+    const u = people.find(x => x.email === b.parentElement.dataset.e);
     amsg('Saving…');
     const d = await api('setStatus', { target: u.email, status: b.dataset.s || u.status, role: b.dataset.r || u.role });
-    amsg(d.ok ? 'Saved.' : (d.error || 'Could not save.'), !d.ok);
-    loadPeople();
+    amsg(d.ok ? 'Saved.' : (d.error || 'Could not save.'), !d.ok); loadPeople();
   });
 }
+$('#peopleSearch').oninput = drawPeople;
 
 // ---------- start ----------
-render(); fillServers();
+render(); drawHistory(); drawChips();
 if (auth) {
   afterLogin();
   api('check').then(r => { if (r && r.ok === false && !r.error) logout('Your login has ended. Please log in again.');
-                           else if (r && r.ok) { auth = { ...auth, name: r.name, role: r.role }; store.set('qi.auth', auth); afterLogin(); } });
+                           else if (r && r.ok) { auth = { ...auth, name: r.name, role: r.role }; store.set('qi.auth', auth); afterLogin(); render(); } });
 } else { loadModels(); showLogin(); }
 setInterval(() => { if (!busy && document.visibilityState === 'visible') loadModels(); }, 30000);
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});

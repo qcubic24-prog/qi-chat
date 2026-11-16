@@ -157,7 +157,7 @@ def _auth_url():
         return AUTH_URL
     if time.time() - _cfg['t'] > 300:
         try:
-            _cfg['url'] = httpx.get('https://qcubic24-prog.github.io/qi-chat/config.json', timeout=10).json().get('auth_url', '')
+            _cfg['url'] = httpx.get('https://qcubic24-prog.github.io/qi-chat/config.json', timeout=10, follow_redirects=True).json().get('auth_url', '')
             _cfg['t'] = time.time()
         except Exception:
             return _cfg.get('url')
