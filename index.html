@@ -320,6 +320,7 @@ const BOARD = 'https://ntfy.sh/qcubic-qi-models-f207696921/json?poll=1&since=13h
 const MODELS = [
   { slug: 'qi-ultra', name: 'Qi Ultra', where: 'Kaggle, two T4 GPUs', about: 'The big, smartest Qi brain. Best for hard questions and research.', wait: '8–12 minutes' },
   { slug: 'qi-pro',   name: 'Qi Pro',   where: 'Kaggle, T4 GPU', about: 'The fast Qi brain. Great for everyday questions.', wait: '4–6 minutes' },
+  { slug: 'qi-oracle', name: 'Qi Always On', where: 'Oracle Cloud, 4 processor cores (no GPU)', about: 'Always on, day and night. Slower, but there whenever the GPU brains are off.', always: true },
 ];
 const IDEAS = [
   ['Research', 'What are the top AI news stories today?'], ['Engineering', 'Help me choose a motor for a 20 kg robot that climbs a 15° slope.'],
@@ -709,7 +710,7 @@ function drawAdminModels() {
                : st === 'starting' ? 'starting on Kaggle, ready in about ' + m.wait : 'switched off';
     return `<div class="card"><div class="t"><span style="width:10px;height:10px;border-radius:50%;background:${dot}"></span>${esc(m.name)}
       <span class="pill">${st}</span></div><div class="s">${esc(m.where)} · ${esc(info)}</div>
-      <div class="row">${st === 'on' ? `<button class="btn warn" data-stop="${i}">Stop</button>`
+      <div class="row">${m.always ? '<span class="s">Runs all the time on Oracle; no Start or Stop needed.</span>' : st === 'on' ? `<button class="btn warn" data-stop="${i}">Stop</button>`
         : st === 'starting' ? `<button class="btn" disabled>Starting…</button>` : `<button class="btn pri" data-start="${i}">Start</button>`}</div></div>`;
   }).join('');
   $$('#aModels [data-stop]').forEach(b => b.onclick = () => stopModel(models[+b.dataset.stop], b));

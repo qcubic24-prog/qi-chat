@@ -5,12 +5,12 @@
 # Paste this into the instance's "Initialization script" (cloud-init) box when you create it:
 #   #!/bin/bash
 #   export QI_MODEL_ID=<Drive id of Qi Trials/qi-pro-brain/qi-pro-brain.gguf>
-#   curl -sL https://qcubic24-prog.github.io/qi-chat/oracle_setup.sh | bash
+#   curl -sL https://qi.q-cubic.com/oracle_setup.sh | bash
 # Setup takes about 30 minutes. Progress is written to /var/log/qi-setup.log. Safe to run again.
 set -u
 exec >> /var/log/qi-setup.log 2>&1
 echo "=== Qi setup started $(date)"
-PAGE=https://qcubic24-prog.github.io/qi-chat
+PAGE=https://qi.q-cubic.com
 Q=/opt/qi
 : "${QI_MODEL_ID:?set QI_MODEL_ID to the Drive id of the Qi Pro brain}"
 
@@ -40,7 +40,7 @@ ARCH=$(uname -m); [ "$ARCH" = aarch64 ] && CF=arm64 || CF=amd64
 
 # The Qi Pro brain from the "Qi Trials" Drive folder
 if [ ! -s $Q/qi-pro-brain.gguf ] || [ "$(stat -c %s $Q/qi-pro-brain.gguf)" -lt 5000000000 ]; then
-  $Q/venv/bin/gdown --id "$QI_MODEL_ID" -O $Q/qi-pro-brain.gguf || echo "!!! brain download failed; run this script again later"
+  $Q/venv/bin/gdown "$QI_MODEL_ID" -O $Q/qi-pro-brain.gguf || echo "!!! brain download failed; run this script again later"
 fi
 
 # The Qi chat server parts (fetched again on every start, so fixes arrive by themselves)
