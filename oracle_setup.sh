@@ -50,8 +50,8 @@ cat > $Q/qi.env <<EOF
 QI_KEY=$(cat $Q/key)
 QI_NAME=Qi Always On
 QI_SLUG=qi-oracle
-QI_ABOUT=Oracle Cloud (always on, 2 processor cores, no graphics card, so it writes a few words per second)
-QI_SLOTS=2
+QI_ABOUT=Oracle Cloud (always on, 2 processor cores, no graphics card, so it writes a few words per second; one answer at a time)
+QI_SLOTS=1
 QI_STORE=/var/lib/qi/chats
 QI_KEEP_DAYS=3
 QI_CLOUDFLARED=$Q/cloudflared
@@ -64,7 +64,7 @@ Description=Qi Pro brain
 After=network-online.target
 [Service]
 User=qi
-ExecStart=$Q/llama.cpp/build/bin/llama-server -m $Q/qi-pro-brain.gguf --host 127.0.0.1 --port 8088 -c 16384 -np 2 -t $(nproc) --jinja --chat-template-kwargs '{"enable_thinking":false}'
+ExecStart=$Q/llama.cpp/build/bin/llama-server -m $Q/qi-pro-brain.gguf --host 127.0.0.1 --port 8088 -c 8192 -np 1 -t $(nproc) --jinja --chat-template-kwargs '{"enable_thinking":false}'
 Restart=always
 RestartSec=10
 [Install]
