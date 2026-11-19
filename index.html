@@ -713,6 +713,8 @@ function drawAdminModels() {
       <div class="row">${m.always ? '<span class="s">Runs all the time on Oracle; no Start or Stop needed.</span>' : st === 'on' ? `<button class="btn warn" data-stop="${i}">Stop</button>`
         : st === 'starting' ? `<button class="btn" disabled>Starting…</button>` : `<button class="btn pri" data-start="${i}">Start</button>`}</div></div>`;
   }).join('');
+  $('#aModels').insertAdjacentHTML('beforeend', nanoCard());
+  if ($('#nanoStart')) $('#nanoStart').onclick = startNano;
   $$('#aModels [data-stop]').forEach(b => b.onclick = () => stopModel(models[+b.dataset.stop], b));
   $$('#aModels [data-start]').forEach(b => b.onclick = () => startModel(models[+b.dataset.start], b));
   if ($('#kSave')) $('#kSave').onclick = async () => {
@@ -724,9 +726,38 @@ function drawAdminModels() {
     else amsg(r.error || 'Could not save it.', true);
   };
 }
+// Qi Nano: one Kaggle run that builds the small phone brain for the Qi app (not a chat brain).
+const NANO_BOARD = 'https://ntfy.sh/qcubic-qi-nano-f207696921/json?poll=1&since=24h';
+const nano = { kstate: '', last: '', pressed: 0 };
+function nanoCard() {
+  const run = nano.kstate === 'running' || nano.kstate === 'queued' || Date.now() - nano.pressed < 10 * 60000;
+  const done = /DONE in/.test(nano.last);
+  return `<div class="card"><div class="t"><span style="width:10px;height:10px;border-radius:50%;background:${run ? 'var(--brand)' : done ? 'var(--ok)' : '#b9b9bf'}"></span>Qi Nano training
+    <span class="pill">${run ? 'training' : done ? 'done' : 'idle'}</span></div>
+    <div class="s">Builds Qi Nano, Q-CUBIC's own small phone brain for basic phones. One run on Kaggle (two T4 GPUs), about 6–9 hours. You can close this page.</div>
+    ${nano.last ? `<div class="s">Latest: ${esc(nano.last)}</div>` : ''}
+    <div class="row">${run ? '<button class="btn" disabled>Training…</button>' : '<button class="btn pri" id="nanoStart">' + (done ? 'Train again' : 'Start training') + '</button>'}</div></div>`;
+}
+async function refreshNano() {
+  try {
+    const t = await (await fetch(NANO_BOARD, { signal: timeout(10000) })).text();
+    const msgs = t.trim().split('\n').filter(Boolean).map(l => { try { return JSON.parse(l); } catch (e) { return null; } }).filter(x => x && x.message);
+    if (msgs.length) nano.last = msgs[msgs.length - 1].message;
+  } catch (e) {}
+  if (view === 'admin') drawAdminModels();
+}
+async function startNano() {
+  const b = $('#nanoStart'); b.disabled = true; b.textContent = 'Starting…'; amsg('');
+  const r = await api('startModel', { slug: 'qi-nano' });
+  if (r.ok) { nano.pressed = Date.now(); amsg('Qi Nano training started on Kaggle. Progress shows here; it takes about 6–9 hours.'); drawAdminModels(); return; }
+  if (r.error === 'no_kaggle_key') { kaggleReady = false; drawAdminModels(); return amsg('Connect Kaggle once (box above), then press Start.', true); }
+  amsg(r.error || 'Could not start it.', true); drawAdminModels();
+}
 async function refreshKaggle() {
   const r = await api('modelStatus');
   if (!r.ok || !r.models) return;
+  nano.kstate = r.models['qi-nano'] || '';
+  refreshNano();
   for (const m of models) m.kstate = r.models[m.slug] || '';
   kaggleReady = !Object.values(r.models).includes('unknown');
   if (view === 'admin') drawAdminModels();
