@@ -274,11 +274,14 @@ async def chat(req: Request):
     STATS['served'] += 1
     chat_id = str(body.pop('qi_chat', '') or uuid.uuid4().hex)
     msgs = [m for m in body.get('messages', []) if m.get('role') != 'system']
-    body['messages'] = [{'role': 'system', 'content': identity()}] + msgs
+    # qi_raw: the Qi phone app sends its own instructions (phone control, JSON replies); keep them and skip web tools.
+    raw = bool(body.pop('qi_raw', False))
+    own = '\n\n'.join(str(m.get('content') or '') for m in body.get('messages', []) if m.get('role') == 'system')
+    body['messages'] = [{'role': 'system', 'content': own if raw and own else identity()}] + msgs
     body['model'] = 'qi'
     stream = bool(body.pop('stream', False))
     body.pop('stream_options', None)
-    use_web = WEB and 'tools' not in body
+    use_web = WEB and 'tools' not in body and not raw
     force = use_web and needs_web(msgs)
 
     async def think():
