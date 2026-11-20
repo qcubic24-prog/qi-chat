@@ -58,7 +58,7 @@ def tunnel():
 sys.path.insert(0, W)
 import qi_register
 def announce(url):
-    qi_register.publish('qi-ultra', {'name': 'Qi Ultra', 'url': url, 'key': KEY, 'about': 'Kaggle (two T4 GPUs, the big Qi Ultra brain)', 'started': int(time.time())})
+    qi_register.publish('qi-ultra', {'name': 'Qi Ultra', 'url': url, 'about': 'Kaggle (two T4 GPUs, the big Qi Ultra brain)', 'started': int(time.time())})
 
 
 tun, url = tunnel()

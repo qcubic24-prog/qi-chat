@@ -4,6 +4,10 @@ import threading, os, subprocess, time, re, glob, secrets, urllib.parse, urllib.
 TRIALS = '/content/drive/MyDrive/Qi Trials'
 if not os.path.isdir(TRIALS): raise SystemExit('Drive is not connected: run drive.mount first')
 SRC = f'{TRIALS}/qi-pro-brain/qi-pro-brain.gguf'
+if not os.path.exists(SRC):      # find the Qi Pro brain anywhere in Qi Trials
+    found = sorted(glob.glob(f'{TRIALS}/**/*pro*.gguf', recursive=True), key=os.path.getsize, reverse=True)
+    if not found: raise SystemExit('Could not find the Qi Pro brain (.gguf) in the "Qi Trials" Drive folder')
+    SRC = found[0]
 STORE = f'{TRIALS}/chats/qi-pro'
 PAGE = 'https://qcubic24-prog.github.io/qi-chat/'
 W = '/content/qi'; os.makedirs(W, exist_ok=True)
@@ -47,7 +51,12 @@ while True:
     time.sleep(3)
 log('Qi Pro brain is running', 'on the GPU' if gpu else 'on the CPU')
 
-KEY = 'qi-' + secrets.token_hex(8)
+# The API key is kept in Qi Trials, so it stays the same every run (paste it in the app once). Never posted publicly.
+KEY_FILE = f'{TRIALS}/qi-pro-api-key.txt'
+KEY = open(KEY_FILE).read().strip() if os.path.exists(KEY_FILE) else ''
+if not KEY.startswith('qi-'):
+    KEY = 'qi-' + secrets.token_hex(16)
+    open(KEY_FILE, 'w').write(KEY)
 os.makedirs(STORE, exist_ok=True)
 qenv = dict(os.environ, QI_KEY=KEY, QI_NAME='Qi Pro', QI_STORE=STORE, QI_KEEP_DAYS='3', QI_ABOUT='Google Colab (one T4 GPU, the fast Qi Pro brain)', QI_SLOTS='2')
 subprocess.Popen([sys.executable, '-m', 'uvicorn', '--app-dir', W, 'qi_server:app', '--host', '127.0.0.1', '--port', '8090'],
@@ -66,14 +75,16 @@ def tunnel():
 sys.path.insert(0, W)
 import qi_register
 def announce(url):
-    qi_register.publish('qi-pro', {'name': 'Qi Pro', 'url': url, 'key': KEY, 'about': 'Google Colab (one T4 GPU, the fast Qi Pro brain)', 'started': int(time.time())})
+    qi_register.publish('qi-pro', {'name': 'Qi Pro', 'url': url, 'about': 'Google Colab (one T4 GPU, the fast Qi Pro brain)', 'started': int(time.time())})
 
 
 tun, url = tunnel()
 announce(url)
-link = PAGE + '#' + urllib.parse.urlencode({'s': url, 'k': KEY, 'n': 'Qi Pro'})
-print('\n' + '=' * 70 + '\nQi Pro is ready on the one-link website: ' + PAGE +
-      '\n\nDirect link (only if the website does not list it yet):\n' + link + '\n' + '=' * 70, flush=True)
+def show_app_details(url):
+    print('\n' + '=' * 70 + '\nQi Pro is running. In the Qi app: Settings > Your own server, paste these two:\n\n'
+          '  Server address:  ' + url + '\n  API key:         ' + KEY + '\n\n'
+          'Keep this Colab tab open while you use it. Chat website: ' + PAGE + '\n' + '=' * 70, flush=True)
+show_app_details(url)
 def switch_off():
     """An admin pressed Stop on the website: tell the website, stop everything, and end this run."""
     log('Qi Pro was switched off from the website')
@@ -96,6 +107,7 @@ while True:
         log('reconnecting the internet link')
         tun, url = tunnel()
         announce(url); last = time.time()
+        show_app_details(url)      # the address changed: paste the new one in the app
     elif time.time() - last > 7200:      # remind the website every 2 hours that this Qi is still on
         announce(url); last = time.time()
     try:

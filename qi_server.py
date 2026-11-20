@@ -167,6 +167,8 @@ def _auth_url():
 async def who(req: Request):
     """The logged-in, approved person behind this request, or None. Without a login service, the server key is used."""
     token = req.headers.get('authorization', '').removeprefix('Bearer ').strip()
+    if KEY and token == KEY:        # this server's own API key (the Qi app's "Your own server" setting)
+        return {'email': 'key', 'name': 'API key', 'role': 'user'}
     url = await asyncio.to_thread(_auth_url)
     if url is None:
         return None
